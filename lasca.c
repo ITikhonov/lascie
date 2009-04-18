@@ -42,7 +42,6 @@ void do_choose() { which=clicked; draw(); }
 void do_exit() { exit(0); }
 void do_move() { if(which) { ops=&move1; }; }
 void do_rename() { if(which) { pos=0; which->s[0]=0; ops=&rename1; draw(); } }
-void do_define() { if(which) { ops=&define; draw(); } }
 
 void button_choose(int x,int y) { hit(x,y); if(clicked) clicked->act(); }
 void button_move1(int x,int y) { which->x=x&(~0x7); which->y=y&(~0x7); ops=&choose; draw(); }
@@ -67,7 +66,6 @@ void init(cairo_t *cr1) {
 		{30,50,"exit", do_exit},
 		{30,70,"move", do_move},
 		{30,90,"rename", do_rename},
-		{30,110,"define", do_define},
 	};
 
 	bts=bts_hold; bte=bts+4;
