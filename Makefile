@@ -1,4 +1,4 @@
-CFLAGS=-g -I/usr/include/cairo -Wall
+CFLAGS=-g -I/usr/include/cairo -Wall -Werror
 LDFLAGS=-lcairo
 
 all: lasca

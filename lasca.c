@@ -10,8 +10,11 @@
 static cairo_t *cr=0;
 int button_height=0;
 
-struct bt { int x,y; char s[8];  void (*act)(void); int x2,y2;} *bts;
-struct bt *bte;
+struct nm { char s[8]; } nms[100];
+struct nm *nme=nms;
+
+struct bt { int x,y; struct nm *n; void (*act)(void); int x2,y2;} bts[100];
+struct bt *bte=bts;
 
 struct ops { void (*button)(int,int); void (*key)(int); };
 
@@ -41,34 +44,35 @@ void hit(int x,int y) {
 void do_choose() { which=clicked; draw(); }
 void do_exit() { exit(0); }
 void do_move() { if(which) { ops=&move1; }; }
-void do_rename() { if(which) { pos=0; which->s[0]=0; ops=&rename1; draw(); } }
+void do_rename() { if(which) { pos=0; which->n->s[0]=0; ops=&rename1; draw(); } }
 
 void button_choose(int x,int y) { hit(x,y); if(clicked) clicked->act(); }
 void button_move1(int x,int y) { which->x=x&(~0x7); which->y=y&(~0x7); ops=&choose; draw(); }
 
 void do_create() {
 	which=bte;
-	which->x=bts[0].x2+5; which->y=bts[0].y; which->s[0]='\0'; which->act=do_choose; bte++;
+	which->x=bts[0].x2+5; which->y=bts[0].y; which->n=nme; which->n->s[0]=0; which->act=do_choose; bte++; nme++;
 	draw();
 	do_rename();
 }
 
 void key_rename1(int k) {
 	if(k==XK_Return) { ops=&choose; return; }
-	if(k==XK_BackSpace) { if(pos>0) { which->s[--pos]='\0'; draw(); } return; }
-	if(pos<8-1) { which->s[pos++]='a'+(k-XK_a); which->s[pos]='\0'; }
+	if(k==XK_BackSpace) { if(pos>0) { which->n->s[--pos]='\0'; draw(); } return; }
+	if(pos<8-1) { which->n->s[pos++]='a'+(k-XK_a); which->n->s[pos]='\0'; }
 	draw_button(which);
 }
 
-void init(cairo_t *cr1) {
-	static struct bt bts_hold[100] = {
-		{30,30,"create", do_create},
-		{30,50,"exit", do_exit},
-		{30,70,"move", do_move},
-		{30,90,"rename", do_rename},
-	};
+void add(int x, int y, char *s, void (*f)(void)) {
+	struct bt *w=bte; w->n=nme; bte++; nme++;
+	w->x=x; w->y=y; strncpy(w->n->s,s,8); w->act=f;
+}
 
-	bts=bts_hold; bte=bts+4;
+void init(cairo_t *cr1) {
+	add(30,30,"create", do_create);
+	add(30,50,"exit", do_exit);
+	add(30,70,"move", do_move);
+	add(30,90,"rename", do_rename);
 
 	cr=cr1;
 	cairo_select_font_face (cr, "times", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
@@ -81,7 +85,7 @@ void init(cairo_t *cr1) {
 }
 
 void draw_button(struct bt *bt) {
-	char *s=bt->s;
+	char *s=bt->n->s;
 
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,s,&te);
