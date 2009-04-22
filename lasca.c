@@ -22,6 +22,7 @@ struct ops { void (*button)(int,int); void (*key)(int); };
 #define OPSK(n) void key_##n(int); struct ops n = {0, key_##n};
 #define OPSB(n) void button_##n(int,int); struct ops n = {button_##n, 0};
 
+OPSB(edit)
 OPSB(choose)
 OPSB(move1)
 OPSK(rename1)
@@ -47,6 +48,23 @@ void do_move() { if(which) { ops=&move1; }; }
 void do_rename() { if(which) { pos=0; which->n->s[0]=0; ops=&rename1; draw(); } }
 void do_open() { if(which) { which->open=!which->open; draw(); } }
 
+int editpos=-1;
+
+void do_edit() {
+	if(!which) return;
+	which->open=1;
+	editpos=0;
+	ops=&edit;
+	draw();
+}
+
+void button_edit(int x, int y) {
+	hit(x,y); if(clicked) {
+		if(which->n->def[editpos]==-1) { which->n->def[editpos+1]=-1; }
+		which->n->def[editpos++]=clicked->n-nms;
+		draw();
+	} else { ops=&choose; }
+}
 void button_choose(int x,int y) { hit(x,y); if(clicked) clicked->act(); }
 void button_move1(int x,int y) { which->x=x&(~0x7); which->y=y&(~0x7); ops=&choose; draw(); }
 
@@ -76,6 +94,7 @@ void init(cairo_t *cr1) {
 	add(30,70,"move", do_move);
 	add(30,90,"rename", do_rename);
 	add(30,110,"open", do_open);
+	add(30,130,"edit", do_edit);
 
 	add(90,90,"test", do_choose);
 	bte[-1].n->def[0]=0;
@@ -125,6 +144,7 @@ void draw_button(struct bt *bt) {
 	int x=bt->x+5,y=bt->y+button_height;
 	cairo_move_to (cr, x, y);
 	cairo_show_text (cr, s);
+	cairo_stroke(cr);
 
 	if(bt->open) {
 		x+=ws[0];
@@ -132,13 +152,18 @@ void draw_button(struct bt *bt) {
 		int *p=ws+1;
 		while(*n != -1) {
 			x+=5;
+			if(ops==&edit&&which==bt&&(p-ws-1)==editpos) {
+				cairo_set_source_rgb(cr,0.9,0.9,0.5);
+				cairo_rectangle(cr,x,bt->y+2,*p,button_height+1);
+				cairo_fill(cr);
+			}
+			cairo_set_source_rgb(cr,0,0,0);
 			cairo_move_to (cr, x, y);
 			cairo_show_text(cr,nms[*n++].s);
+			cairo_stroke(cr);
 			x+=(*p++);
 		}
 	}
-
-	cairo_stroke(cr);
 }
 
 void draw() {
