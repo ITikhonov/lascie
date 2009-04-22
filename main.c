@@ -20,7 +20,6 @@ typedef struct win {
 static void win_init(win_t *win);
 static void win_init2(win_t *win);
 static void win_deinit(win_t *win);
-static void win_draw(win_t *win);
 static void win_handle_events(win_t *win);
 
 extern void init(cairo_t *);
