@@ -14,7 +14,7 @@ int button_height=0;
 struct nm { char s[8]; union { int8_t *b; int *i; } def; int len, data; } nms[100];
 struct nm *nme=nms;
 
-struct bt { int x,y; struct nm *n; void (*act)(void); int x2,y2,open,pos;} bts[100];
+struct bt { int x,y; struct nm *n; void (*act)(void); void (*draw)(struct bt *); int x2,y2,open,pos;} bts[100];
 struct bt *bte=bts;
 
 struct ops { void (*button)(int,int); void (*key)(int); };
@@ -35,6 +35,8 @@ struct bt *which=0;
 int pos;
 
 void draw_button(struct bt *);
+void draw_data(struct bt *);
+void draw_code(struct bt *);
 void draw();
 
 void hit(int x,int y) {
@@ -47,7 +49,11 @@ void do_choose() { which=clicked; draw(); }
 void do_exit() { exit(0); }
 void do_move() { if(which) { ops=&move1; }; }
 void do_rename() { if(which) { pos=0; which->n->s[0]=0; ops=&rename1; draw(); } }
-void do_open() { if(which) { which->open=!which->open; draw(); } }
+void do_open() { if(which) {
+	which->open=!which->open;
+	which->draw=which->open?(which->n->data?draw_data:draw_code):draw_button;
+	draw();
+} }
 
 int editpos=-1;
 
@@ -83,7 +89,7 @@ void key_rename1(int k) {
 	if(k==XK_Return) { ops=&choose; return; }
 	if(k==XK_BackSpace) { if(pos>0) { which->n->s[--pos]='\0'; draw(); } return; }
 	if(pos<8-1) { which->n->s[pos++]='a'+(k-XK_a); which->n->s[pos]='\0'; }
-	draw_button(which);
+	which->draw(which);
 }
 
 void add(int x, int y, char *s, void (*f)(void)) {
@@ -91,6 +97,7 @@ void add(int x, int y, char *s, void (*f)(void)) {
 	w->x=x; w->y=y; strncpy(w->n->s,s,8); w->act=f;
 	w->n->len=0;
 	w->n->data=0;
+	w->draw = draw_button;
 }
 
 int8_t hexext[256];
@@ -135,36 +142,37 @@ void init(cairo_t *cr1) {
 
 void draw_button(struct bt *bt) {
 	char *s=bt->n->s;
+	cairo_text_extents_t te;
+	cairo_text_extents(cr,s,&te);
+
+	bt->x2=bt->x+5+te.width+5;
+	bt->y2=bt->y+button_height+5;
+	int x=bt->x+5,y=bt->y+button_height;
+
+	if(bt==which) { cairo_set_source_rgb(cr,0.9,0.5,0.5); } else { cairo_set_source_rgb(cr,0.5,0.9,0.5); }
+	cairo_rectangle(cr,bt->x,bt->y,bt->x2-bt->x,bt->y2-bt->y);
+	cairo_fill(cr);
+
+	cairo_set_source_rgb(cr,0,0,0);
+	cairo_move_to (cr, x, y);
+	cairo_show_text (cr, s);
+	cairo_stroke(cr);
+}
+
+void draw_code(struct bt *bt) {
+	char *s=bt->n->s;
 	int ws[11], wn=1;
-	char ns[10];
 
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,s,&te);
 	ws[0]=te.width;
 
-	if(bt->open) {
-		if(!bt->n->data) {
-			int *n=bt->n->def.i;
-			int *p=ws+1;
-			while(*n != -1) {
-				cairo_text_extents(cr,nms[*n++].s,&te);
-				*p++=te.width;
-				wn++;
-			}
-		} else {
-			sprintf(ns,"%x:",bt->n->len);
-			cairo_text_extents(cr,ns,&te);
-			ws[1]=te.x_advance;
-			wn++;
-
-			int8_t *p=bt->n->def.b+bt->pos;
-			int m=bt->n->len;
-			if(m>8) m=8;
-			int8_t *e=p+m;
-			ws[2]=0;
-			wn++;
-			while(p<e) { ws[2]+=hexext[*p++]; }
-		}
+	int *n=bt->n->def.i;
+	int *p=ws+1;
+	while(*n != -1) {
+		cairo_text_extents(cr,nms[*n++].s,&te);
+		*p++=te.width;
+		wn++;
 	}
 
 	if(bt==which) { cairo_set_source_rgb(cr,0.9,0.5,0.5); } else { cairo_set_source_rgb(cr,0.5,0.9,0.5); }
@@ -183,48 +191,85 @@ void draw_button(struct bt *bt) {
 	cairo_show_text (cr, s);
 	cairo_stroke(cr);
 
-	if(bt->open) {
-		x+=ws[0];
-		if(!bt->n->data) {
-			int *n=bt->n->def.i;
-			int *p=ws+1;
-			while(*n != -1) {
-				x+=5;
-				if(ops==&edit&&which==bt&&(p-ws-1)==editpos) {
-					cairo_set_source_rgb(cr,0.9,0.9,0.5);
-					cairo_rectangle(cr,x,bt->y+2,*p,button_height+1);
-					cairo_fill(cr);
-				}
-				cairo_set_source_rgb(cr,0,0,0);
-				cairo_move_to (cr, x, y);
-				cairo_show_text(cr,nms[*n++].s);
-				cairo_stroke(cr);
-				x+=(*p++);
-			}
-		} else {
-				x+=5;
-				cairo_move_to (cr, x, y);
-				cairo_show_text(cr,ns);
+	x+=ws[0];
 
-				cairo_set_source_rgb(cr,0,0,0.5);
-				int8_t *p=bt->n->def.b;
-				int8_t *e=p+bt->n->len;
-				p+=bt->pos;
-				if((p+8)>=e) { p=e-8-1; }
-				else { e=p+8; }
-				
-				char s[4]; while(p<e) { sprintf(s," %02hhx",*p++); cairo_show_text(cr,s); }
-
-				cairo_stroke(cr);
+	n=bt->n->def.i;
+	p=ws+1;
+	while(*n != -1) {
+		x+=5;
+		if(ops==&edit&&which==bt&&(p-ws-1)==editpos) {
+			cairo_set_source_rgb(cr,0.9,0.9,0.5);
+			cairo_rectangle(cr,x,bt->y+2,*p,button_height+1);
+			cairo_fill(cr);
 		}
+		cairo_set_source_rgb(cr,0,0,0);
+		cairo_move_to (cr, x, y);
+		cairo_show_text(cr,nms[*n++].s);
+		cairo_stroke(cr);
+		x+=(*p++);
 	}
+}
+
+void draw_data(struct bt *bt) {
+	char *s=bt->n->s;
+	int ws[11], wn=1;
+	char ns[10];
+
+	cairo_text_extents_t te;
+	cairo_text_extents(cr,s,&te);
+	ws[0]=te.width;
+
+	sprintf(ns,"%x:",bt->n->len);
+	cairo_text_extents(cr,ns,&te);
+	ws[1]=te.x_advance;
+	wn++;
+
+	int8_t *p=bt->n->def.b+bt->pos;
+	int m=bt->n->len;
+	if(m>8) m=8;
+	int8_t *e=p+m;
+	ws[2]=0;
+	wn++;
+	while(p<e) { ws[2]+=hexext[*p++]; }
+
+	if(bt==which) { cairo_set_source_rgb(cr,0.9,0.5,0.5); } else { cairo_set_source_rgb(cr,0.5,0.9,0.5); }
+
+	bt->x2=bt->x+5+ws[0];
+	int i=0; for(i=1;i<wn;i++) { bt->x2+=5+ws[i]; }
+	bt->x2+=5;
+
+	bt->y2=bt->y+button_height+5;
+	cairo_rectangle(cr,bt->x,bt->y,bt->x2-bt->x,bt->y2-bt->y);
+	cairo_fill(cr);
+
+	cairo_set_source_rgb(cr,0,0,0);
+	int x=bt->x+5,y=bt->y+button_height;
+	cairo_move_to (cr, x, y);
+	cairo_show_text (cr, s);
+	cairo_stroke(cr);
+
+	x+=ws[0];
+	x+=5;
+	cairo_move_to (cr, x, y);
+	cairo_show_text(cr,ns);
+
+	cairo_set_source_rgb(cr,0,0,0.5);
+	p=bt->n->def.b;
+	e=p+bt->n->len;
+	p+=bt->pos;
+	if((p+8)>=e) { p=e-8-1; }
+	else { e=p+8; }
+	
+	char h[4]; while(p<e) { sprintf(h," %02hhx",*p++); cairo_show_text(cr,h); }
+
+	cairo_stroke(cr);
 }
 
 void draw() {
 	cairo_save(cr);
 	cairo_set_source_rgb(cr,255,255,255);
 	cairo_paint(cr);
-	struct bt *p=bts; for(;p<bte;p++) { draw_button(p); }
+	struct bt *p=bts; for(;p<bte;p++) { p->draw(p); }
 	cairo_restore(cr);
 }
 
