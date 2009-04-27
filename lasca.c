@@ -14,7 +14,7 @@ int button_height=0;
 struct nm { char s[8]; union { int8_t *b; int *i; } def; int len, data; } nms[100];
 struct nm *nme=nms;
 
-struct bt { int x,y; struct nm *n; void (*act)(void); void (*draw)(struct bt *); int x2,y2,open,pos;} bts[100];
+struct bt { int x,y; struct nm *n; void (*act)(void); void (*draw)(struct bt *); int x2,y2,pos;} bts[100];
 struct bt *bte=bts;
 
 struct ops { void (*button)(int,int); void (*key)(int); };
@@ -49,17 +49,29 @@ void do_choose() { which=clicked; draw(); }
 void do_exit() { exit(0); }
 void do_move() { if(which) { ops=&move1; }; }
 void do_rename() { if(which) { pos=0; which->n->s[0]=0; ops=&rename1; draw(); } }
-void do_open() { if(which) {
-	which->open=!which->open;
-	which->draw=which->open?(which->n->data?draw_data:draw_code):draw_button;
+void do_open() {
+	if(!which) return;
+	struct bt *w=bte++;
+	w->x=which->x;
+	w->y=which->y2;
+	w->n=which->n;
+	w->act=do_choose;
+	w->draw=which->n->data?draw_data:draw_code;
+	which=w;
 	draw();
-} }
+}
+
+void do_close() {
+	if(!which) return;
+	memmove(which,--bte,sizeof(struct bt));
+	which=0;
+	draw();
+}
 
 int editpos=-1;
 
 void do_edit() {
 	if(!which) return;
-	which->open=1;
 	editpos=0;
 	ops=&edit;
 	draw();
@@ -111,6 +123,7 @@ void init(cairo_t *cr1) {
 	add(30,130,"edit", do_edit);
 	add(30,150,"up", do_up);
 	add(30,170,"down", do_down);
+	add(30,190,"close", do_close);
 
 	add(90,90,"test", do_choose);
 	bte[-1].n->def.i=(int *)malloc(17);
