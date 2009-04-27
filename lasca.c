@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <cairo.h>
+#include <stdint.h>
 
 #define XK_LATIN1
 #define XK_MISCELLANY
@@ -10,7 +11,7 @@
 static cairo_t *cr=0;
 int button_height=0;
 
-struct nm { char s[8]; int def[10]; int data; } nms[100];
+struct nm { char s[8]; union { int8_t *b; int *i; } def; int len, data; } nms[100];
 struct nm *nme=nms;
 
 struct bt { int x,y; struct nm *n; void (*act)(void); int x2,y2,open,pos;} bts[100];
@@ -58,13 +59,13 @@ void do_edit() {
 	draw();
 }
 
-void do_down() { if(which) { if((which->pos+8)<which->n->def[1]) { which->pos+=8; draw(); } } }
+void do_down() { if(which) { if((which->pos+8)<which->n->len) { which->pos+=8; draw(); } } }
 void do_up() { if(which) { if((which->pos-8)>=0) { which->pos-=8; draw(); } } }
 
 void button_edit(int x, int y) {
 	hit(x,y); if(clicked) {
-		if(which->n->def[editpos]==-1) { which->n->def[editpos+1]=-1; }
-		which->n->def[editpos++]=clicked->n-nms;
+		if(which->n->def.i[editpos]==-1) { which->n->def.i[editpos+1]=-1; }
+		which->n->def.i[editpos++]=clicked->n-nms;
 		draw();
 	} else { ops=&choose; }
 }
@@ -73,7 +74,7 @@ void button_move1(int x,int y) { which->x=x&(~0x7); which->y=y&(~0x7); ops=&choo
 
 void do_create() {
 	which=bte; which->n=nme; bte++; nme++;
-	which->x=bts[0].x2+5; which->y=bts[0].y; which->n->s[0]=0; which->act=do_choose; which->n->def[0]=-1;
+	which->x=bts[0].x2+5; which->y=bts[0].y; which->n->s[0]=0; which->act=do_choose; which->n->def.i[0]=-1;
 	draw();
 	do_rename();
 }
@@ -88,11 +89,11 @@ void key_rename1(int k) {
 void add(int x, int y, char *s, void (*f)(void)) {
 	struct bt *w=bte; w->n=nme; bte++; nme++;
 	w->x=x; w->y=y; strncpy(w->n->s,s,8); w->act=f;
-	w->n->def[0]=-1;
+	w->n->len=0;
 	w->n->data=0;
 }
 
-unsigned char hexext[256];
+int8_t hexext[256];
 
 void init(cairo_t *cr1) {
 	add(30,30,"create", do_create);
@@ -105,15 +106,16 @@ void init(cairo_t *cr1) {
 	add(30,170,"down", do_down);
 
 	add(90,90,"test", do_choose);
-	bte[-1].n->def[0]=0;
-	bte[-1].n->def[1]=1;
-	bte[-1].n->def[2]=2;
-	bte[-1].n->def[3]=-1;
+	bte[-1].n->def.i=(int *)malloc(17);
+	bte[-1].n->def.i[0]=0;
+	bte[-1].n->def.i[1]=1;
+	bte[-1].n->def.i[2]=2;
+	bte[-1].n->def.i[3]=-1;
 
 	add(150,90,"dtest", do_choose);
-	char *p=(char *)((bte[-1].n->def[0])=(int)malloc(17));
+	int8_t *p=bte[-1].n->def.b=(int8_t *)malloc(17);
 	{ int i; for(i=0;i<17;i++) p[i]=i; }
-	bte[-1].n->def[1]=17;
+	bte[-1].n->len=17;
 	bte[-1].n->data=1;
 	bte[-1].pos=8;
 
@@ -142,7 +144,7 @@ void draw_button(struct bt *bt) {
 
 	if(bt->open) {
 		if(!bt->n->data) {
-			int *n=bt->n->def;
+			int *n=bt->n->def.i;
 			int *p=ws+1;
 			while(*n != -1) {
 				cairo_text_extents(cr,nms[*n++].s,&te);
@@ -150,18 +152,18 @@ void draw_button(struct bt *bt) {
 				wn++;
 			}
 		} else {
-			sprintf(ns,"%x:",bt->n->def[1]);
+			sprintf(ns,"%x:",bt->n->len);
 			cairo_text_extents(cr,ns,&te);
 			ws[1]=te.x_advance;
 			wn++;
 
-			char *p=(char *)(bt->n->def[0])+bt->pos;
-			int m=bt->n->def[1];
+			int8_t *p=bt->n->def.b+bt->pos;
+			int m=bt->n->len;
 			if(m>8) m=8;
-			char *e=p+m;
+			int8_t *e=p+m;
 			ws[2]=0;
 			wn++;
-			while(p<e) { ws[2]+=hexext[(unsigned char)(*p++)]; }
+			while(p<e) { ws[2]+=hexext[*p++]; }
 		}
 	}
 
@@ -184,7 +186,7 @@ void draw_button(struct bt *bt) {
 	if(bt->open) {
 		x+=ws[0];
 		if(!bt->n->data) {
-			int *n=bt->n->def;
+			int *n=bt->n->def.i;
 			int *p=ws+1;
 			while(*n != -1) {
 				x+=5;
@@ -205,8 +207,8 @@ void draw_button(struct bt *bt) {
 				cairo_show_text(cr,ns);
 
 				cairo_set_source_rgb(cr,0,0,0.5);
-				char *p=(char *)(bt->n->def[0]);
-				char *e=p+bt->n->def[1];
+				int8_t *p=bt->n->def.b;
+				int8_t *e=p+bt->n->len;
 				p+=bt->pos;
 				if((p+8)>=e) { p=e-8-1; }
 				else { e=p+8; }
