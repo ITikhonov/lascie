@@ -3,6 +3,8 @@
 #include <string.h>
 #include <cairo.h>
 #include <stdint.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #define XK_LATIN1
 #define XK_MISCELLANY
@@ -13,9 +15,11 @@ int button_height=0;
 
 struct nm { char s[8]; union { int8_t *b; int *i; } def; int len, data; } nms[100];
 struct nm *nme=nms;
+struct nm *nmu;
 
 struct bt { int x,y; struct nm *n; void (*act)(void); void (*draw)(struct bt *); int x2,y2,pos;} bts[100];
 struct bt *bte=bts;
+struct bt *btu;
 
 struct ops { void (*button)(int,int); void (*key)(int); };
 
@@ -68,6 +72,57 @@ void do_close() {
 	draw();
 }
 
+void do_load() {
+	int f=open("save",O_RDONLY);
+	int n;
+	nme=nmu;
+	bte=btu;
+
+	read(f,&n,4);
+	while(n--) {
+		struct bt *p=bte++;
+		int x;
+		read(f,&p->x,4);
+		read(f,&p->y,4);
+		read(f,&x,4);
+		p->n=nmu+x;
+		p->act=do_choose;
+		p->draw=draw_button;
+	}
+
+	read(f,&n,4);
+	while(n--) {
+		struct nm *p=nme++;
+		read(f,&p->s,8);
+		read(f,&p->len,4);
+		p->def.b=malloc(p->len);
+		read(f,p->def.b,p->len);
+		read(f,&p->data,4);
+	}
+	draw();
+}
+
+void do_save() {
+	int f=open("save",O_WRONLY|O_CREAT|O_TRUNC,0644);
+	int x=bte-btu;
+	write(f,&x,4);
+	struct bt *p=btu; for(;p<bte;p++) {
+		write(f,&p->x,4);
+		write(f,&p->y,4);
+		x=p->n-nmu;
+		write(f,&x,4);
+	}
+	x=nme-nmu;
+	write(f,&x,4);
+	struct nm *r=nmu; for(;r<nme;r++) {
+		write(f,&r->s,8);
+		write(f,&r->len,4);
+		write(f,r->def.b,r->len);
+		write(f,&r->data,4);
+	}
+	close(f);
+}
+
 int editpos=-1;
 
 void do_edit() {
@@ -82,8 +137,11 @@ void do_up() { if(which) { if((which->pos-8)>=0) { which->pos-=8; draw(); } } }
 
 void button_edit(int x, int y) {
 	hit(x,y); if(clicked) {
-		if(which->n->def.i[editpos]==-1) { which->n->def.i[editpos+1]=-1; }
-		which->n->def.i[editpos++]=clicked->n-nms;
+		if((editpos+1)*4>which->n->len) {
+			which->n->len+=4;
+			which->n->def.i=realloc(which->n->def.i,which->n->len);
+		}
+		which->n->def.i[editpos++]=clicked->n-nmu;
 		draw();
 	} else { ops=&choose; }
 }
@@ -92,7 +150,10 @@ void button_move1(int x,int y) { which->x=x&(~0x7); which->y=y&(~0x7); ops=&choo
 
 void do_create() {
 	which=bte; which->n=nme; bte++; nme++;
-	which->x=bts[0].x2+5; which->y=bts[0].y; which->n->s[0]=0; which->act=do_choose; which->n->def.i[0]=-1;
+	which->x=bts[0].x2+5; which->y=bts[0].y; which->n->s[0]=0; which->act=do_choose;
+	which->n->def.i=0;
+	which->n->len=0;
+	which->draw=draw_button;
 	draw();
 	do_rename();
 }
@@ -107,6 +168,7 @@ void key_rename1(int k) {
 void add(int x, int y, char *s, void (*f)(void)) {
 	struct bt *w=bte; w->n=nme; bte++; nme++;
 	w->x=x; w->y=y; strncpy(w->n->s,s,8); w->act=f;
+	w->n->def.b=0;
 	w->n->len=0;
 	w->n->data=0;
 	w->draw = draw_button;
@@ -124,13 +186,20 @@ void init(cairo_t *cr1) {
 	add(30,150,"up", do_up);
 	add(30,170,"down", do_down);
 	add(30,190,"close", do_close);
+	add(30,210,"save", do_save);
+	add(30,230,"load", do_load);
 
+	btu=bte;
+	nmu=nme;
+
+#if 0
 	add(90,90,"test", do_choose);
-	bte[-1].n->def.i=(int *)malloc(17);
+	bte[-1].n->def.i=(int *)malloc(16);
+	bte[-1].n->len=16;
 	bte[-1].n->def.i[0]=0;
 	bte[-1].n->def.i[1]=1;
-	bte[-1].n->def.i[2]=2;
-	bte[-1].n->def.i[3]=-1;
+	bte[-1].n->def.i[2]=-1;
+	bte[-1].n->def.i[3]=-2;
 
 	add(150,90,"dtest", do_choose);
 	int8_t *p=bte[-1].n->def.b=(int8_t *)malloc(17);
@@ -138,6 +207,7 @@ void init(cairo_t *cr1) {
 	bte[-1].n->len=17;
 	bte[-1].n->data=1;
 	bte[-1].pos=8;
+#endif
 
 	cr=cr1;
 	cairo_select_font_face (cr, "times", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
@@ -181,9 +251,10 @@ void draw_code(struct bt *bt) {
 	ws[0]=te.width;
 
 	int *n=bt->n->def.i;
+	int *e=n+bt->n->len/4;
 	int *p=ws+1;
-	while(*n != -1) {
-		cairo_text_extents(cr,nms[*n++].s,&te);
+	while(n<e) {
+		cairo_text_extents(cr,nmu[*n++].s,&te);
 		*p++=te.width;
 		wn++;
 	}
@@ -207,8 +278,9 @@ void draw_code(struct bt *bt) {
 	x+=ws[0];
 
 	n=bt->n->def.i;
+	e=n+bt->n->len/4;
 	p=ws+1;
-	while(*n != -1) {
+	while(n<e) {
 		x+=5;
 		if(ops==&edit&&which==bt&&(p-ws-1)==editpos) {
 			cairo_set_source_rgb(cr,0.9,0.9,0.5);
@@ -217,7 +289,7 @@ void draw_code(struct bt *bt) {
 		}
 		cairo_set_source_rgb(cr,0,0,0);
 		cairo_move_to (cr, x, y);
-		cairo_show_text(cr,nms[*n++].s);
+		cairo_show_text(cr,nmu[*n++].s);
 		cairo_stroke(cr);
 		x+=(*p++);
 	}
