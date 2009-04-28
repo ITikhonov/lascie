@@ -13,7 +13,7 @@
 static cairo_t *cr=0;
 int button_height=0;
 
-struct nm { char s[8]; union { int8_t *b; int *i; } def; int len, data; } nms[100];
+struct nm { char s[8]; union { uint8_t *b; int *i; } def; int len, data; } nms[100];
 struct nm *nme=nms;
 struct nm *nmu;
 
@@ -135,6 +135,43 @@ void do_edit() {
 void do_down() { if(which) { if((which->pos+8)<which->n->len) { which->pos+=8; draw(); } } }
 void do_up() { if(which) { if((which->pos-8)>=0) { which->pos-=8; draw(); } } }
 
+static uint8_t *ccode;
+uint8_t *addrs[100];
+
+void do_compile() {
+	uint8_t **a; int32_t *i;
+	uint8_t *c;
+	struct nm *p;
+
+	addrs[0]=ccode;
+	a=addrs+1;
+	p=nmu+1; for(;p<nme;p++) {
+		*a=a[-1]+p->len+(p->len/4)+1;
+		a++;
+	}
+
+	c=ccode; p=nmu; for(;p<nme;p++) {
+		i=p->def.i;
+		for(;i<p->def.i+p->len/4;i++) {
+			*c=0xe8; c++;
+			if(*i<0) {
+				*((int32_t *)c)=(int32_t)(nmu[*i].def.b)-(int32_t)(c+4);
+			} else {
+				*((int32_t *)c)=(int32_t)addrs[*i]-(int32_t)(c+4);
+			}
+			c+=4;
+		}
+		*c=0xc3; c++;
+	}
+}
+
+void do_run() {
+	if(which) {
+		void (*f)(void)=(void *)addrs[which->n-nmu];
+		f();
+	}
+}
+
 void button_edit(int x, int y) {
 	hit(x,y); if(clicked) {
 		if((editpos+1)*4>which->n->len) {
@@ -176,18 +213,33 @@ void add(int x, int y, char *s, void (*f)(void)) {
 
 int8_t hexext[256];
 
+void do_ping(void) { puts("PONG"); }
+
 void init(cairo_t *cr1) {
-	add(30,30,"create", do_create);
-	add(30,50,"exit", do_exit);
-	add(30,70,"move", do_move);
-	add(30,90,"rename", do_rename);
-	add(30,110,"open", do_open);
-	add(30,130,"edit", do_edit);
-	add(30,150,"up", do_up);
-	add(30,170,"down", do_down);
-	add(30,190,"close", do_close);
-	add(30,210,"save", do_save);
+	add(30,310,"run", do_run);
+
+	add(30,290,"ping", do_ping);
+	ccode=bte[-1].n->def.b=(uint8_t*)do_ping;
+	bte[-1].n->len=0;
+
+	add(30,270,"code", do_choose);
+	ccode=bte[-1].n->def.b=(uint8_t *)malloc(65536);
+	bte[-1].n->len=65536;
+	bte[-1].n->data=1;
+	bte[-1].pos=0;
+
+	add(30,250,"compile", do_compile);
 	add(30,230,"load", do_load);
+	add(30,210,"save", do_save);
+	add(30,190,"close", do_close);
+	add(30,170,"down", do_down);
+	add(30,150,"up", do_up);
+	add(30,130,"edit", do_edit);
+	add(30,110,"open", do_open);
+	add(30,90,"rename", do_rename);
+	add(30,70,"move", do_move);
+	add(30,50,"exit", do_exit);
+	add(30,30,"create", do_create);
 
 	btu=bte;
 	nmu=nme;
@@ -309,10 +361,10 @@ void draw_data(struct bt *bt) {
 	ws[1]=te.x_advance;
 	wn++;
 
-	int8_t *p=bt->n->def.b+bt->pos;
+	uint8_t *p=bt->n->def.b+bt->pos;
 	int m=bt->n->len;
 	if(m>8) m=8;
-	int8_t *e=p+m;
+	uint8_t *e=p+m;
 	ws[2]=0;
 	wn++;
 	while(p<e) { ws[2]+=hexext[*p++]; }
