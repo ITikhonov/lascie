@@ -136,30 +136,57 @@ void do_down() { if(which) { if((which->pos+8)<which->n->len) { which->pos+=8; d
 void do_up() { if(which) { if((which->pos-8)>=0) { which->pos-=8; draw(); } } }
 
 static uint8_t *ccode;
-uint8_t *addrs[100];
+
+
+uint8_t *compile_at;
+
+
+uint8_t *nests[5];
+uint8_t **cnest;
+
+void do_nest() { }
+
+void do_question() {
+	*compile_at++=0x75;
+	*cnest++=compile_at;
+	*compile_at++=0x00; // placeholder for unnest
+	
+}
+
+void do_unnest() {
+	--cnest;
+	int off=((uint32_t)compile_at)-((uint32_t)(*cnest+1));
+	**cnest=off;
+}
 
 void do_compile() {
-	uint8_t **a; int32_t *i;
-	uint8_t *c;
+	int32_t *i;
+	uint8_t *c,*ca;
 	struct nm *p;
 
-	addrs[0]=ccode;
-	a=addrs+1;
-	p=nmu+1; for(;p<nme;p++) {
-		*a=a[-1]+p->len+(p->len/4)+1;
-		a++;
-	}
+	cnest=nests;
 
-	c=ccode; p=nmu; for(;p<nme;p++) {
+	c=ccode+5*(nme-nmu);
+	ca=ccode;
+	p=nmu; for(;p<nme;p++) {
+		*ca++=0xe9;
+		*((int32_t *)ca)=(int32_t)c-(int32_t)(ca+4);
+		ca+=4;
+
 		i=p->def.i;
 		for(;i<p->def.i+p->len/4;i++) {
-			*c=0xe8; c++;
-			if(*i<0) {
-				*((int32_t *)c)=(int32_t)(nmu[*i].def.b)-(int32_t)(c+4);
-			} else {
-				*((int32_t *)c)=(int32_t)addrs[*i]-(int32_t)(c+4);
+			switch(nmu[*i].data) {
+			case 2: {
+					void (*f)(void)=(void*)nmu[*i].def.b;
+					compile_at=c; f(); c=compile_at;
+				} break;
+			case 0:
+				*c=0xe8; c++;
+				if(*i<0) { *((int32_t *)c)=(int32_t)(nmu[*i].def.b)-(int32_t)(c+4); }
+				else { *((int32_t *)c)=(int32_t)(ccode+5*(*i))-(int32_t)(c+4); }
+				c+=4;
+				break;
 			}
-			c+=4;
 		}
 		*c=0xc3; c++;
 	}
@@ -167,7 +194,7 @@ void do_compile() {
 
 void do_run() {
 	if(which) {
-		void (*f)(void)=(void *)addrs[which->n-nmu];
+		void (*f)(void)=(void *)ccode+5*(which->n-nmu);
 		f();
 	}
 }
@@ -217,6 +244,21 @@ void do_ping(void) { puts("PONG"); }
 
 void init(cairo_t *cr1) {
 	add(30,310,"run", do_run);
+
+	add(140,30,"?", do_ping);
+	ccode=bte[-1].n->def.b=(uint8_t*)do_question;
+	bte[-1].n->data=2;
+	bte[-1].n->len=0;
+
+	add(100,30,"{", do_ping);
+	ccode=bte[-1].n->def.b=(uint8_t*)do_nest;
+	bte[-1].n->data=2;
+	bte[-1].n->len=0;
+
+	add(120,30,"}", do_ping);
+	ccode=bte[-1].n->def.b=(uint8_t*)do_unnest;
+	bte[-1].n->data=2;
+	bte[-1].n->len=0;
 
 	add(30,290,"ping", do_ping);
 	ccode=bte[-1].n->def.b=(uint8_t*)do_ping;
