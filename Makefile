@@ -1,5 +1,5 @@
 CFLAGS=-g -I/usr/include/cairo -Wall -Werror
-LDFLAGS=-lcairo
+LDFLAGS=-lcairo -lpthread -lasound
 
 all: lasca
 

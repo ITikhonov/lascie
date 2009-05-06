@@ -6,6 +6,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include <alsa/asoundlib.h>
+#include <pthread.h>
+
+#include <math.h>
+
 #define XK_LATIN1
 #define XK_MISCELLANY
 #include <X11/keysymdef.h>
@@ -13,7 +18,10 @@
 static cairo_t *cr=0;
 int button_height=0;
 
-struct nm { char s[8]; union { uint8_t *b; int *i; } def; int len, data; } nms[100];
+uint32_t stack_place[16];
+uint32_t *stack = stack_place-1;
+
+struct nm { char s[8]; union { uint8_t *b; int *i; void (*f)(void); } def; int len, data; } nms[100];
 struct nm *nme=nms;
 struct nm *nmu;
 
@@ -144,13 +152,22 @@ uint8_t *compile_at;
 uint8_t *nests[5];
 uint8_t **cnest;
 
-void do_nest() { }
+void do_true() {
+	*compile_at++=0x31;
+	*compile_at++=0xc0;
+}
 
 void do_question() {
-	*compile_at++=0x75;
+	*compile_at++=0x75; // JNE Jump short if not equal (ZF=0)
 	*cnest++=compile_at;
 	*compile_at++=0x00; // placeholder for unnest
 	
+}
+
+void do_loop() {
+	*compile_at++=0xeb;
+	int off=((uint32_t)(*(cnest-1)-4))-((uint32_t)compile_at);
+	*compile_at++=(int8_t)off;
 }
 
 void do_unnest() {
@@ -192,11 +209,16 @@ void do_compile() {
 	}
 }
 
+pthread_t runt;
+
+void *_do_run(void *p) {
+	void (*f)(void)=p;
+	f();
+	pthread_exit(0);
+}
+
 void do_run() {
-	if(which) {
-		void (*f)(void)=(void *)ccode+5*(which->n-nmu);
-		f();
-	}
+	if(which) { pthread_create(&runt,0,_do_run,(void *)ccode+5*(which->n-nmu)); }
 }
 
 void button_edit(int x, int y) {
@@ -242,26 +264,36 @@ int8_t hexext[256];
 
 void do_ping(void) { puts("PONG"); }
 
+void do_decrement(void) { (*stack)--; }
+
+void alsa_init();
+
 void init(cairo_t *cr1) {
+	alsa_init();
 	add(30,310,"run", do_run);
 
-	add(140,30,"?", do_ping);
-	ccode=bte[-1].n->def.b=(uint8_t*)do_question;
+	add(170,30,"forever", do_choose);
+	bte[-1].n->def.f=do_true;
 	bte[-1].n->data=2;
 	bte[-1].n->len=0;
 
-	add(100,30,"{", do_ping);
-	ccode=bte[-1].n->def.b=(uint8_t*)do_nest;
+	add(140,30,"<<", do_choose);
+	bte[-1].n->def.f=do_loop;
 	bte[-1].n->data=2;
 	bte[-1].n->len=0;
 
-	add(120,30,"}", do_ping);
-	ccode=bte[-1].n->def.b=(uint8_t*)do_unnest;
+	add(100,30,"{", do_choose);
+	bte[-1].n->def.f=do_question;
+	bte[-1].n->data=2;
+	bte[-1].n->len=0;
+
+	add(120,30,"}", do_choose);
+	bte[-1].n->def.f=do_unnest;
 	bte[-1].n->data=2;
 	bte[-1].n->len=0;
 
 	add(30,290,"ping", do_ping);
-	ccode=bte[-1].n->def.b=(uint8_t*)do_ping;
+	bte[-1].n->def.f=do_ping;
 	bte[-1].n->len=0;
 
 	add(30,270,"code", do_choose);
@@ -454,4 +486,73 @@ void draw() {
 
 void button(int x,int y) { if(ops->button) ops->button(x,y); }
 void key(int k)		 { if(ops->key) ops->key(k); }
+
+
+#if 1
+snd_pcm_t *alsa_h;
+
+int16_t soundbuf[2][2*441];
+uint32_t soundbufno=0;
+
+pthread_t sthread;
+
+void *alsa_run(void *v) {
+	for(;;) {
+		int err=snd_pcm_writei(alsa_h,soundbuf[soundbufno&1],441);
+                if(err<0) { snd_pcm_recover(alsa_h,err,0); }
+                switch(snd_pcm_state(alsa_h)) {
+                        case SND_PCM_STATE_RUNNING: break;
+                        case SND_PCM_STATE_PREPARED: printf("start\n"); snd_pcm_start(alsa_h); break;
+                        case SND_PCM_STATE_XRUN: printf("fucked"); break;
+                        default: printf("wtf state %d\n", snd_pcm_state(alsa_h));
+                }
+		soundbufno++;
+	}
+}
+
+void alsa_sin() { *stack=sin((2*M_PI/2048) * *stack); }
+
+
+void alsa_init() {
+	int err;
+
+	add(140,120,"sin", do_choose);
+	bte[-1].n->def.f=alsa_sin;
+	bte[-1].n->data=0;
+
+	add(140,60,"sound", do_choose);
+	bte[-1].n->def.b=(uint8_t *)soundbuf;
+	bte[-1].n->len=sizeof(soundbuf);
+	bte[-1].n->data=1;
+	bte[-1].pos=0;
+
+	add(140,90,"sound#", do_choose);
+	bte[-1].n->def.b=(uint8_t *)(&soundbufno);
+	bte[-1].n->len=4;
+	bte[-1].n->data=1;
+	bte[-1].pos=0;
+
+	memset(soundbuf,0,sizeof(soundbuf));
+
+        if ((err = snd_pcm_open(&alsa_h, "default", SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
+                printf("Playback open error: %s\n", snd_strerror(err));
+                exit(1);
+        }
+
+        if ((err = snd_pcm_set_params(alsa_h,
+                                     SND_PCM_FORMAT_S16,
+                                     SND_PCM_ACCESS_RW_INTERLEAVED,
+                                     2,
+                                     44100,
+                                     1,
+                                     1000900)) < 0) {
+               printf("Playback open error: %s\n", snd_strerror(err));
+               exit(EXIT_FAILURE);
+       }
+
+       pthread_create(&sthread,0,alsa_run,0);
+}
+
+
+#endif
 
