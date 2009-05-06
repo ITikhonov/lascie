@@ -15,6 +15,9 @@
 #define XK_MISCELLANY
 #include <X11/keysymdef.h>
 
+int max(int x,int y) { return x>y?x:y; }
+int min(int x,int y) { return x>y?y:x; }
+
 static cairo_t *cr=0;
 int button_height=0;
 
@@ -140,8 +143,10 @@ void do_edit() {
 	draw();
 }
 
-void do_down() { if(which) { if((which->pos+8)<which->n->len) { which->pos+=8; draw(); } } }
-void do_up() { if(which) { if((which->pos-8)>=0) { which->pos-=8; draw(); } } }
+
+void do_down() { if(which) { which->pos=max(0,min(which->pos+8*8,(which->n->len/8)*8)); draw(); } }
+
+void do_up() { if(which) { which->pos=max(0,which->pos-8*8); draw(); } }
 
 static uint8_t *ccode;
 
@@ -260,7 +265,7 @@ void add(int x, int y, char *s, void (*f)(void)) {
 	w->draw = draw_button;
 }
 
-int8_t hexext[256];
+int8_t hexext;
 
 void do_ping(void) { puts("PONG"); }
 
@@ -344,9 +349,10 @@ void init(cairo_t *cr1) {
 	cairo_text_extents(cr,"abcdefghijklmnopqrstuvwxyz0123456789;",&te);
 	button_height=te.height;
 
-	char s[4];
 	int n;
-	for(n=0;n<0x100;n++) { sprintf(s," %02hhx",n); cairo_text_extents(cr,s,&te); hexext[n]=te.x_advance; }
+	char s[2]={0,0};
+	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
+	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 }
 
 void draw_button(struct bt *bt) {
@@ -421,58 +427,35 @@ void draw_code(struct bt *bt) {
 	}
 }
 
+
 void draw_data(struct bt *bt) {
-	char *s=bt->n->s;
-	int ws[11], wn=1;
-	char ns[10];
-
-	cairo_text_extents_t te;
-	cairo_text_extents(cr,s,&te);
-	ws[0]=te.width;
-
-	sprintf(ns,"%x:",bt->n->len);
-	cairo_text_extents(cr,ns,&te);
-	ws[1]=te.x_advance;
-	wn++;
-
-	uint8_t *p=bt->n->def.b+bt->pos;
-	int m=bt->n->len;
-	if(m>8) m=8;
-	uint8_t *e=p+m;
-	ws[2]=0;
-	wn++;
-	while(p<e) { ws[2]+=hexext[*p++]; }
+	int w=hexext*2*8+15;
+	int h=button_height*(1+min(bt->n->len/8,8))+10;
+	bt->x2=bt->x+w; bt->y2=bt->y+h;
 
 	if(bt==which) { cairo_set_source_rgb(cr,0.9,0.5,0.5); } else { cairo_set_source_rgb(cr,0.5,0.9,0.5); }
-
-	bt->x2=bt->x+5+ws[0];
-	int i=0; for(i=1;i<wn;i++) { bt->x2+=5+ws[i]; }
-	bt->x2+=5;
-
-	bt->y2=bt->y+button_height+5;
-	cairo_rectangle(cr,bt->x,bt->y,bt->x2-bt->x,bt->y2-bt->y);
+	cairo_rectangle(cr,bt->x,bt->y,w,h);
 	cairo_fill(cr);
 
-	cairo_set_source_rgb(cr,0,0,0);
-	int x=bt->x+5,y=bt->y+button_height;
+	cairo_set_source_rgb(cr,0.1,0.1,0.1);
+
+	int i=0,x=bt->x+5,y=bt->y+button_height;
+
 	cairo_move_to (cr, x, y);
-	cairo_show_text (cr, s);
-	cairo_stroke(cr);
+	cairo_show_text (cr, bt->n->s);
 
-	x+=ws[0];
-	x+=5;
-	cairo_move_to (cr, x, y);
-	cairo_show_text(cr,ns);
+	uint8_t *p=bt->n->def.b+which->pos;
+	char hex[16]="0123456789abcdef";
+	char s[3]={0,0,0};
 
-	cairo_set_source_rgb(cr,0,0,0.5);
-	p=bt->n->def.b;
-	e=p+bt->n->len;
-	p+=bt->pos;
-	if((p+8)>=e) { p=e-8-1; }
-	else { e=p+8; }
-	
-	char h[4]; while(p<e) { sprintf(h," %02hhx",*p++); cairo_show_text(cr,h); }
-
+	for(;i<(bt->n->len-which->pos) && i<64;i++) {
+		if(i%8==0) { y+=button_height; x=bt->x; }
+		if(i%4==0) { x+=5; }
+		s[0]=hex[(*p)>>4]; s[1]=hex[(*p)&0xf];
+		cairo_move_to (cr, x, y);
+		cairo_show_text(cr,s);
+		x+=hexext*2; p++;
+	}
 	cairo_stroke(cr);
 }
 
@@ -480,8 +463,9 @@ void draw() {
 	cairo_save(cr);
 	cairo_set_source_rgb(cr,255,255,255);
 	cairo_paint(cr);
+
+	cairo_set_source_rgb(cr,0.1,0.1,0.1);
 	struct bt *p=bts; for(;p<bte;p++) { p->draw(p); }
-	cairo_restore(cr);
 }
 
 void button(int x,int y) { if(ops->button) ops->button(x,y); }
@@ -532,7 +516,7 @@ void alsa_init() {
 	bte[-1].n->data=1;
 	bte[-1].pos=0;
 
-	memset(soundbuf,0,sizeof(soundbuf));
+	int i; for(i=0;i<441*2;i+=2) { soundbuf[0][i]=soundbuf[0][i+1]=soundbuf[1][i]=soundbuf[1][i+1]=i; }
 
         if ((err = snd_pcm_open(&alsa_h, "default", SND_PCM_STREAM_PLAYBACK, 0)) < 0) {
                 printf("Playback open error: %s\n", snd_strerror(err));
