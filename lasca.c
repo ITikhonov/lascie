@@ -468,8 +468,15 @@ void draw() {
 	struct bt *p=bts; for(;p<bte;p++) { p->draw(p); }
 }
 
-void button(int x,int y) { if(ops->button) ops->button(x,y); }
-void key(int k)		 { if(ops->key) ops->key(k); }
+void button(int x,int y) {
+	if(ops==&edit)		{ button_edit(x,y); }
+	else if(ops==&choose)	{ button_choose(x,y); }
+	else if(ops==&move1)	{ button_move1(x,y); }
+}
+
+void key(int k) {
+	if(ops==&rename1) { key_rename1(k); }
+}
 
 
 #if 1
