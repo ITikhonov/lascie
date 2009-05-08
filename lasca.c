@@ -24,11 +24,13 @@ int button_height=0;
 uint32_t stack_place[16];
 uint32_t *stack = stack_place-1;
 
-struct nm { char s[8]; union { uint8_t *b; int *i; void (*f)(void); } def; int len, data; } nms[100];
+enum nmtype { compiled, data, macro, command };
+
+struct nm { char s[8]; union { uint8_t *b; int *i; void (*f)(void); } def; int len; enum nmtype ntype; } nms[100];
 struct nm *nme=nms;
 struct nm *nmu;
 
-struct bt { int x,y; struct nm *n; void (*act)(void); void (*draw)(struct bt *); int x2,y2,pos;} bts[100];
+struct bt { int x,y; struct nm *n; void (*draw)(struct bt *); int x2,y2,pos;} bts[100];
 struct bt *bte=bts;
 struct bt *btu;
 
@@ -50,7 +52,6 @@ void hit(int x,int y) {
 	clicked=0;
 }
 
-void do_choose() { which=clicked; draw(); }
 void do_exit() { exit(0); }
 void do_move() { if(which) { ops=move1; }; }
 void do_rename() { if(which) { pos=0; which->n->s[0]=0; ops=rename1; draw(); } }
@@ -60,8 +61,12 @@ void do_open() {
 	w->x=which->x;
 	w->y=which->y2;
 	w->n=which->n;
-	w->act=do_choose;
-	w->draw=which->n->data?draw_data:draw_code;
+	switch(which->n->ntype) {
+	case compiled: w->draw=draw_code; break;
+	case data: w->draw=draw_data; break;
+	case macro: break;
+	case command: break;
+	}
 	which=w;
 	draw();
 }
@@ -87,7 +92,6 @@ void do_load() {
 		read(f,&p->y,4);
 		read(f,&x,4);
 		p->n=nmu+x;
-		p->act=do_choose;
 		p->draw=draw_button;
 	}
 
@@ -98,7 +102,7 @@ void do_load() {
 		read(f,&p->len,4);
 		p->def.b=malloc(p->len);
 		read(f,p->def.b,p->len);
-		read(f,&p->data,4);
+		read(f,&p->ntype,4);
 	}
 	draw();
 }
@@ -119,7 +123,7 @@ void do_save() {
 		write(f,&r->s,8);
 		write(f,&r->len,4);
 		write(f,r->def.b,r->len);
-		write(f,&r->data,4);
+		write(f,&r->ntype,4);
 	}
 	close(f);
 }
@@ -187,16 +191,20 @@ void do_compile() {
 
 		i=p->def.i;
 		for(;i<p->def.i+p->len/4;i++) {
-			switch(nmu[*i].data) {
-			case 2: {
+			switch(nmu[*i].ntype) {
+			case macro: {
 					void (*f)(void)=(void*)nmu[*i].def.b;
 					compile_at=c; f(); c=compile_at;
 				} break;
-			case 0:
+			case command:
+			case compiled:
 				*c=0xe8; c++;
 				if(*i<0) { *((int32_t *)c)=(int32_t)(nmu[*i].def.b)-(int32_t)(c+4); }
 				else { *((int32_t *)c)=(int32_t)(ccode+5*(*i))-(int32_t)(c+4); }
 				c+=4;
+				break;
+			case data:
+				abort(); // to be defined
 				break;
 			}
 		}
@@ -225,11 +233,9 @@ void replace() {
 	draw();
 }
 
-void button_choose(int x,int y) { hit(x,y); if(clicked) clicked->act(); }
-
 void do_create() {
 	which=bte; which->n=nme; bte++; nme++;
-	which->x=bts[0].x2+5; which->y=bts[0].y; which->n->s[0]=0; which->act=do_choose;
+	which->x=bts[0].x2+5; which->y=bts[0].y; which->n->s[0]=0;
 	which->n->def.i=0;
 	which->n->len=0;
 	which->draw=draw_button;
@@ -244,12 +250,12 @@ void key_rename1(int k) {
 	which->draw(which);
 }
 
-void add(int x, int y, char *s, void (*f)(void)) {
+void add(int x, int y, char *s, void *f) {
 	struct bt *w=bte; w->n=nme; bte++; nme++;
-	w->x=x; w->y=y; strncpy(w->n->s,s,8); w->act=f;
-	w->n->def.b=0;
+	w->x=x; w->y=y; strncpy(w->n->s,s,8);
+	w->n->def.b=(uint8_t*)f;
 	w->n->len=0;
-	w->n->data=0;
+	w->n->ntype=command;
 	w->draw = draw_button;
 }
 
@@ -265,34 +271,29 @@ void init(cairo_t *cr1) {
 	alsa_init();
 	add(30,310,"run", do_run);
 
-	add(170,30,"forever", do_choose);
-	bte[-1].n->def.f=do_true;
-	bte[-1].n->data=2;
+	add(170,30,"forever", do_true);
+	bte[-1].n->ntype=macro;
 	bte[-1].n->len=0;
 
-	add(140,30,"<<", do_choose);
-	bte[-1].n->def.f=do_loop;
-	bte[-1].n->data=2;
+	add(140,30,"<<", do_loop);
+	bte[-1].n->ntype=macro;
 	bte[-1].n->len=0;
 
-	add(100,30,"{", do_choose);
-	bte[-1].n->def.f=do_question;
-	bte[-1].n->data=2;
+	add(100,30,"{", do_question);
+	bte[-1].n->ntype=macro;
 	bte[-1].n->len=0;
 
-	add(120,30,"}", do_choose);
-	bte[-1].n->def.f=do_unnest;
-	bte[-1].n->data=2;
+	add(120,30,"}", do_unnest);
+	bte[-1].n->ntype=macro;
 	bte[-1].n->len=0;
 
 	add(30,290,"ping", do_ping);
-	bte[-1].n->def.f=do_ping;
 	bte[-1].n->len=0;
 
-	add(30,270,"code", do_choose);
-	ccode=bte[-1].n->def.b=(uint8_t *)malloc(65536);
+	ccode=(uint8_t *)malloc(65536);
+	add(30,270,"code", ccode);
 	bte[-1].n->len=65536;
-	bte[-1].n->data=1;
+	bte[-1].n->ntype=data;
 	bte[-1].pos=0;
 
 	add(30,250,"compile", do_compile);
@@ -310,23 +311,6 @@ void init(cairo_t *cr1) {
 
 	btu=bte;
 	nmu=nme;
-
-#if 0
-	add(90,90,"test", do_choose);
-	bte[-1].n->def.i=(int *)malloc(16);
-	bte[-1].n->len=16;
-	bte[-1].n->def.i[0]=0;
-	bte[-1].n->def.i[1]=1;
-	bte[-1].n->def.i[2]=-1;
-	bte[-1].n->def.i[3]=-2;
-
-	add(150,90,"dtest", do_choose);
-	int8_t *p=bte[-1].n->def.b=(int8_t *)malloc(17);
-	{ int i; for(i=0;i<17;i++) p[i]=i; }
-	bte[-1].n->len=17;
-	bte[-1].n->data=1;
-	bte[-1].pos=8;
-#endif
 
 	cr=cr1;
 	cairo_select_font_face (cr, "times", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
@@ -459,7 +443,14 @@ void draw() {
 void button(int x,int y) {
 	switch(ops) {
 	case edit:	{ hit(x,y); if(clicked) { replace(); } else { ops=choose; draw(); } } break;
-	case choose:	{ hit(x,y); if(clicked) clicked->act(); } break;
+	case choose:
+		hit(x,y); if(clicked) {
+			if(clicked->n->ntype==command) {
+				void (*f)(void)=(void *)clicked->n->def.b;
+				f();
+			} else { which=clicked; draw(); }
+		}
+		break;
 	case move1:	{ which->x=x&(~0x7); which->y=y&(~0x7); ops=choose; draw(); } break;
 	case rename1:	break;
 	}
@@ -501,20 +492,17 @@ void alsa_sin() { *stack=sin((2*M_PI/2048) * *stack); }
 void alsa_init() {
 	int err;
 
-	add(140,120,"sin", do_choose);
-	bte[-1].n->def.f=alsa_sin;
-	bte[-1].n->data=0;
+	add(140,120,"sin", alsa_sin);
+	bte[-1].n->ntype=compiled;
 
-	add(140,60,"sound", do_choose);
-	bte[-1].n->def.b=(uint8_t *)soundbuf;
+	add(140,60,"sound", soundbuf);
 	bte[-1].n->len=sizeof(soundbuf);
-	bte[-1].n->data=1;
+	bte[-1].n->ntype=data;
 	bte[-1].pos=0;
 
-	add(140,90,"sound#", do_choose);
-	bte[-1].n->def.b=(uint8_t *)(&soundbufno);
+	add(140,90,"sound#", &soundbufno);
 	bte[-1].n->len=4;
-	bte[-1].n->data=1;
+	bte[-1].n->ntype=data;
 	bte[-1].pos=0;
 
 	int i; for(i=0;i<441*2;i+=2) { soundbuf[0][i]=soundbuf[0][i+1]=soundbuf[1][i]=soundbuf[1][i+1]=i; }
