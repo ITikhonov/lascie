@@ -32,18 +32,9 @@ struct bt { int x,y; struct nm *n; void (*act)(void); void (*draw)(struct bt *);
 struct bt *bte=bts;
 struct bt *btu;
 
-struct ops { void (*button)(int,int); void (*key)(int); };
+enum ops { edit,choose,move1,rename1 };
 
-#define OPSBK(n) void button_##n(int,int); void key_##n(int); struct ops n = {button_##n, key_##n};
-#define OPSK(n) void key_##n(int); struct ops n = {0, key_##n};
-#define OPSB(n) void button_##n(int,int); struct ops n = {button_##n, 0};
-
-OPSB(edit)
-OPSB(choose)
-OPSB(move1)
-OPSK(rename1)
-
-struct ops *ops=&choose;
+enum ops ops=choose;
 
 struct bt *clicked=0;
 struct bt *which=0;
@@ -59,11 +50,10 @@ void hit(int x,int y) {
 	clicked=0;
 }
 
-
 void do_choose() { which=clicked; draw(); }
 void do_exit() { exit(0); }
-void do_move() { if(which) { ops=&move1; }; }
-void do_rename() { if(which) { pos=0; which->n->s[0]=0; ops=&rename1; draw(); } }
+void do_move() { if(which) { ops=move1; }; }
+void do_rename() { if(which) { pos=0; which->n->s[0]=0; ops=rename1; draw(); } }
 void do_open() {
 	if(!which) return;
 	struct bt *w=bte++;
@@ -139,7 +129,7 @@ int editpos=-1;
 void do_edit() {
 	if(!which) return;
 	editpos=0;
-	ops=&edit;
+	ops=edit;
 	draw();
 }
 
@@ -226,18 +216,16 @@ void do_run() {
 	if(which) { pthread_create(&runt,0,_do_run,(void *)ccode+5*(which->n-nmu)); }
 }
 
-void button_edit(int x, int y) {
-	hit(x,y); if(clicked) {
-		if((editpos+1)*4>which->n->len) {
-			which->n->len+=4;
-			which->n->def.i=realloc(which->n->def.i,which->n->len);
-		}
-		which->n->def.i[editpos++]=clicked->n-nmu;
-		draw();
-	} else { ops=&choose; }
+void replace() {
+	if((editpos+1)*4>which->n->len) {
+		which->n->len+=4;
+		which->n->def.i=realloc(which->n->def.i,which->n->len);
+	}
+	which->n->def.i[editpos++]=clicked->n-nmu;
+	draw();
 }
+
 void button_choose(int x,int y) { hit(x,y); if(clicked) clicked->act(); }
-void button_move1(int x,int y) { which->x=x&(~0x7); which->y=y&(~0x7); ops=&choose; draw(); }
 
 void do_create() {
 	which=bte; which->n=nme; bte++; nme++;
@@ -250,7 +238,7 @@ void do_create() {
 }
 
 void key_rename1(int k) {
-	if(k==XK_Return) { ops=&choose; return; }
+	if(k==XK_Return) { ops=choose; return; }
 	if(k==XK_BackSpace) { if(pos>0) { which->n->s[--pos]='\0'; draw(); } return; }
 	if(pos<8-1) { which->n->s[pos++]='a'+(k-XK_a); which->n->s[pos]='\0'; }
 	which->draw(which);
@@ -414,7 +402,7 @@ void draw_code(struct bt *bt) {
 	p=ws+1;
 	while(n<e) {
 		x+=5;
-		if(ops==&edit&&which==bt&&(p-ws-1)==editpos) {
+		if(ops==edit&&which==bt&&(p-ws-1)==editpos) {
 			cairo_set_source_rgb(cr,0.9,0.9,0.5);
 			cairo_rectangle(cr,x,bt->y+2,*p,button_height+1);
 			cairo_fill(cr);
@@ -469,13 +457,19 @@ void draw() {
 }
 
 void button(int x,int y) {
-	if(ops==&edit)		{ button_edit(x,y); }
-	else if(ops==&choose)	{ button_choose(x,y); }
-	else if(ops==&move1)	{ button_move1(x,y); }
+	switch(ops) {
+	case edit:	{ hit(x,y); if(clicked) { replace(); } else { ops=choose; draw(); } } break;
+	case choose:	{ hit(x,y); if(clicked) clicked->act(); } break;
+	case move1:	{ which->x=x&(~0x7); which->y=y&(~0x7); ops=choose; draw(); } break;
+	case rename1:	break;
+	}
 }
 
 void key(int k) {
-	if(ops==&rename1) { key_rename1(k); }
+	switch(ops) {
+	case rename1: { key_rename1(k); } break;
+	default:;
+	}
 }
 
 
