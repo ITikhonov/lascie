@@ -21,63 +21,25 @@ int min(int x,int y) { return x>y?y:x; }
 static cairo_t *cr=0;
 int button_height=0;
 
+uint8_t drawcode[65535];
+uint8_t *drawcode_e=drawcode;
+
 uint32_t stack_place[16];
 uint32_t *stack = stack_place-1;
 
+
 enum nmtype { compiled, data, macro, command };
 
-struct nm { char s[8]; union { uint8_t *b; int *i; void (*f)(void); } def; int len; enum nmtype ntype; } nms[100];
-struct nm *nme=nms;
-struct nm *nmu;
+struct c1 { uint8_t op; uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; int open; };
+struct c2 { uint8_t op; int32_t p; };
+union c { uint8_t *op; struct c1 *c1; struct c2 *c2; };
 
-struct bt { int x,y; struct nm *n; void (*draw)(struct bt *); int x2,y2,pos;} bts[100];
-struct bt *bte=bts;
-struct bt *btu;
-
-enum ops { edit,choose,move1,rename1 };
-
-enum ops ops=choose;
-
-struct bt *clicked=0;
-struct bt *which=0;
-int pos;
-
-void draw_button(struct bt *);
-void draw_data(struct bt *);
-void draw_code(struct bt *);
 void draw();
 
-void hit(int x,int y) {
-	struct bt *p=bte; for(;p!=bts;) { --p; if(x>p->x&&x<p->x2 && y>p->y&&y<p->y2) {clicked=p; return;} }
-	clicked=0;
-}
 
 void do_exit() { exit(0); }
-void do_move() { if(which) { ops=move1; }; }
-void do_rename() { if(which) { pos=0; which->n->s[0]=0; ops=rename1; draw(); } }
-void do_open() {
-	if(!which) return;
-	struct bt *w=bte++;
-	w->x=which->x;
-	w->y=which->y2;
-	w->n=which->n;
-	switch(which->n->ntype) {
-	case compiled: w->draw=draw_code; break;
-	case data: w->draw=draw_data; break;
-	case macro: break;
-	case command: break;
-	}
-	which=w;
-	draw();
-}
 
-void do_close() {
-	if(!which) return;
-	memmove(which,--bte,sizeof(struct bt));
-	which=0;
-	draw();
-}
-
+#if 0
 void do_load() {
 	int f=open("save",O_RDONLY);
 	int n;
@@ -128,28 +90,17 @@ void do_save() {
 	close(f);
 }
 
-int editpos=-1;
-
-void do_edit() {
-	if(!which) return;
-	editpos=0;
-	ops=edit;
-	draw();
-}
-
-
-void do_down() { if(which) { which->pos=max(0,min(which->pos+8*8,(which->n->len/8)*8)); draw(); } }
-
-void do_up() { if(which) { which->pos=max(0,which->pos-8*8); draw(); } }
+#endif
 
 static uint8_t *ccode;
-
-
 uint8_t *compile_at;
-
 
 uint8_t *nests[5];
 uint8_t **cnest;
+
+void do_ret() {
+	*compile_at++=0xc3;
+}
 
 void do_true() {
 	*compile_at++=0x31;
@@ -174,6 +125,8 @@ void do_unnest() {
 	int off=((uint32_t)compile_at)-((uint32_t)(*cnest+1));
 	**cnest=off;
 }
+
+#if 0
 
 void do_compile() {
 	int32_t *i;
@@ -224,40 +177,29 @@ void do_run() {
 	if(which) { pthread_create(&runt,0,_do_run,(void *)ccode+5*(which->n-nmu)); }
 }
 
-void replace() {
-	if((editpos+1)*4>which->n->len) {
-		which->n->len+=4;
-		which->n->def.i=realloc(which->n->def.i,which->n->len);
-	}
-	which->n->def.i[editpos++]=clicked->n-nmu;
-	draw();
+#endif
+
+void resize(struct c1 *c) {
+	cairo_text_extents_t te;
+	cairo_text_extents(cr,c->s,&te);
+	c->w=te.x_advance+10; c->h=button_height+5;
 }
 
-void do_create() {
-	which=bte; which->n=nme; bte++; nme++;
-	which->x=bts[0].x2+5; which->y=bts[0].y; which->n->s[0]=0;
-	which->n->def.i=0;
-	which->n->len=0;
-	which->draw=draw_button;
-	draw();
-	do_rename();
+struct c1 *add(int x, int y, char *s, void *f, int len, int t) {
+	union c c;
+	c.op=drawcode_e;
+
+	c.c1->op=1; c.c1->x=x; c.c1->y=y; c.c1->t=t; c.c1->data=f; c.c1->l=len;
+	strncpy(c.c1->s,s,7);
+	resize(c.c1);
+	struct c1 *r=c.c1++;
+	drawcode_e=c.op;
+	return r;
 }
 
-void key_rename1(int k) {
-	if(k==XK_Return) { ops=choose; return; }
-	if(k==XK_BackSpace) { if(pos>0) { which->n->s[--pos]='\0'; draw(); } return; }
-	if(pos<8-1) { which->n->s[pos++]='a'+(k-XK_a); which->n->s[pos]='\0'; }
-	which->draw(which);
-}
+union c edit={0};
 
-void add(int x, int y, char *s, void *f) {
-	struct bt *w=bte; w->n=nme; bte++; nme++;
-	w->x=x; w->y=y; strncpy(w->n->s,s,8);
-	w->n->def.b=(uint8_t*)f;
-	w->n->len=0;
-	w->n->ntype=command;
-	w->draw = draw_button;
-}
+void do_create() { edit.c1=add(100, 100, "", 0, 0, compiled); draw(); }
 
 int8_t hexext;
 
@@ -268,50 +210,6 @@ void do_decrement(void) { (*stack)--; }
 void alsa_init();
 
 void init(cairo_t *cr1) {
-	alsa_init();
-	add(30,310,"run", do_run);
-
-	add(170,30,"forever", do_true);
-	bte[-1].n->ntype=macro;
-	bte[-1].n->len=0;
-
-	add(140,30,"<<", do_loop);
-	bte[-1].n->ntype=macro;
-	bte[-1].n->len=0;
-
-	add(100,30,"{", do_question);
-	bte[-1].n->ntype=macro;
-	bte[-1].n->len=0;
-
-	add(120,30,"}", do_unnest);
-	bte[-1].n->ntype=macro;
-	bte[-1].n->len=0;
-
-	add(30,290,"ping", do_ping);
-	bte[-1].n->len=0;
-
-	ccode=(uint8_t *)malloc(65536);
-	add(30,270,"code", ccode);
-	bte[-1].n->len=65536;
-	bte[-1].n->ntype=data;
-	bte[-1].pos=0;
-
-	add(30,250,"compile", do_compile);
-	add(30,230,"load", do_load);
-	add(30,210,"save", do_save);
-	add(30,190,"close", do_close);
-	add(30,170,"down", do_down);
-	add(30,150,"up", do_up);
-	add(30,130,"edit", do_edit);
-	add(30,110,"open", do_open);
-	add(30,90,"rename", do_rename);
-	add(30,70,"move", do_move);
-	add(30,50,"exit", do_exit);
-	add(30,30,"create", do_create);
-
-	btu=bte;
-	nmu=nme;
-
 	cr=cr1;
 	cairo_select_font_face (cr, "times", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
 	cairo_set_font_size(cr, 12.0);
@@ -325,146 +223,126 @@ void init(cairo_t *cr1) {
 	char s[2]={0,0};
 	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
+
+	alsa_init();
+
+	add(170,30,";", do_ret,0,macro);
+	add(170,30,"forever", do_true,0,macro);
+	add(140,30,"<<", do_loop,0,macro);
+	add(100,30,"{", do_question,0,macro);
+	add(120,30,"}", do_unnest,0,macro);
+	add(30,290,"ping", do_ping,0,command);
+	ccode=(uint8_t *)malloc(65536);
+	add(30,270,"code", ccode,65536,data);
+#if 0
+	add(30,250,"compile", do_compile,0,command);
+	add(30,230,"load", do_load,0,command);
+	add(30,210,"save", do_save,0,command);
+	add(30,310,"run", do_run,0,command);
+#endif
+	add(30,50,"exit", do_exit,0,command);
+	add(30,30,"create", do_create,0,command);
+
 }
 
-void draw_button(struct bt *bt) {
-	char *s=bt->n->s;
-	cairo_text_extents_t te;
-	cairo_text_extents(cr,s,&te);
+int dull=0;
 
-	bt->x2=bt->x+5+te.width+5;
-	bt->y2=bt->y+button_height+5;
-	int x=bt->x+5,y=bt->y+button_height;
+void padcolor() { if(!dull) { cairo_set_source_rgb(cr,0.5,0.9,0.5); } else { cairo_set_source_rgb(cr,0.8,0.8,0.8); } }
+void textcolor() { cairo_set_source_rgb(cr,0.0,0.0,0.0); }
 
-	if(bt==which) { cairo_set_source_rgb(cr,0.9,0.5,0.5); } else { cairo_set_source_rgb(cr,0.5,0.9,0.5); }
-	cairo_rectangle(cr,bt->x,bt->y,bt->x2-bt->x,bt->y2-bt->y);
-	cairo_fill(cr);
+union c c;
+int x,y;
+struct c1 *o;
 
-	cairo_set_source_rgb(cr,0,0,0);
-	cairo_move_to (cr, x, y);
-	cairo_show_text (cr, s);
-	cairo_stroke(cr);
-}
-
-void draw_code(struct bt *bt) {
-	char *s=bt->n->s;
-	int ws[11], wn=1;
-
-	cairo_text_extents_t te;
-	cairo_text_extents(cr,s,&te);
-	ws[0]=te.width;
-
-	int *n=bt->n->def.i;
-	int *e=n+bt->n->len/4;
-	int *p=ws+1;
-	while(n<e) {
-		cairo_text_extents(cr,nmu[*n++].s,&te);
-		*p++=te.width;
-		wn++;
-	}
-
-	if(bt==which) { cairo_set_source_rgb(cr,0.9,0.5,0.5); } else { cairo_set_source_rgb(cr,0.5,0.9,0.5); }
-
-	bt->x2=bt->x+5+ws[0];
-	int i=0; for(i=1;i<wn;i++) { bt->x2+=5+ws[i]; }
-	bt->x2+=5;
-
-	bt->y2=bt->y+button_height+5;
-	cairo_rectangle(cr,bt->x,bt->y,bt->x2-bt->x,bt->y2-bt->y);
-	cairo_fill(cr);
-
-	cairo_set_source_rgb(cr,0,0,0);
-	int x=bt->x+5,y=bt->y+button_height;
-	cairo_move_to (cr, x, y);
-	cairo_show_text (cr, s);
-	cairo_stroke(cr);
-
-	x+=ws[0];
-
-	n=bt->n->def.i;
-	e=n+bt->n->len/4;
-	p=ws+1;
-	while(n<e) {
-		x+=5;
-		if(ops==edit&&which==bt&&(p-ws-1)==editpos) {
-			cairo_set_source_rgb(cr,0.9,0.9,0.5);
-			cairo_rectangle(cr,x,bt->y+2,*p,button_height+1);
-			cairo_fill(cr);
-		}
-		cairo_set_source_rgb(cr,0,0,0);
-		cairo_move_to (cr, x, y);
-		cairo_show_text(cr,nmu[*n++].s);
-		cairo_stroke(cr);
-		x+=(*p++);
+void load() {
+	switch(*c.op) {
+	case 1: x=c.c1->x; y=c.c1->y; o=c.c1; return;
+	case 2: o=(struct c1 *)(drawcode+c.c2->p); return;
 	}
 }
 
+void first() { c.op=drawcode; load(); }
+void next() {
+	switch(*c.op) {
+	case 1: c.c1++; break;
+	case 2: c.c2++; break;
+	}
+	load();
+}
 
-void draw_data(struct bt *bt) {
-	int w=hexext*2*8+15;
-	int h=button_height*(1+min(bt->n->len/8,8))+10;
-	bt->x2=bt->x+w; bt->y2=bt->y+h;
-
-	if(bt==which) { cairo_set_source_rgb(cr,0.9,0.5,0.5); } else { cairo_set_source_rgb(cr,0.5,0.9,0.5); }
-	cairo_rectangle(cr,bt->x,bt->y,w,h);
+void label() {
+	padcolor();
+	cairo_rectangle(cr,x,y,o->w,o->h);
 	cairo_fill(cr);
 
-	cairo_set_source_rgb(cr,0.1,0.1,0.1);
-
-	int i=0,x=bt->x+5,y=bt->y+button_height;
-
-	cairo_move_to (cr, x, y);
-	cairo_show_text (cr, bt->n->s);
-
-	uint8_t *p=bt->n->def.b+which->pos;
-	char hex[16]="0123456789abcdef";
-	char s[3]={0,0,0};
-
-	for(;i<(bt->n->len-which->pos) && i<64;i++) {
-		if(i%8==0) { y+=button_height; x=bt->x; }
-		if(i%4==0) { x+=5; }
-		s[0]=hex[(*p)>>4]; s[1]=hex[(*p)&0xf];
-		cairo_move_to (cr, x, y);
-		cairo_show_text(cr,s);
-		x+=hexext*2; p++;
-	}
+	textcolor();
+	cairo_move_to(cr, x+5, y+button_height);
+	cairo_show_text(cr, o->s);
 	cairo_stroke(cr);
+
 }
 
 void draw() {
-	cairo_save(cr);
 	cairo_set_source_rgb(cr,255,255,255);
 	cairo_paint(cr);
 
 	cairo_set_source_rgb(cr,0.1,0.1,0.1);
-	struct bt *p=bts; for(;p<bte;p++) { p->draw(p); }
-}
 
-void button(int x,int y) {
-	switch(ops) {
-	case edit:	{ hit(x,y); if(clicked) { replace(); } else { ops=choose; draw(); } } break;
-	case choose:
-		hit(x,y); if(clicked) {
-			if(clicked->n->ntype==command) {
-				void (*f)(void)=(void *)clicked->n->def.b;
-				f();
-			} else { which=clicked; draw(); }
-		}
-		break;
-	case move1:	{ which->x=x&(~0x7); which->y=y&(~0x7); ops=choose; draw(); } break;
-	case rename1:	break;
+	first();
+	while(*c.op!=0) {
+		dull=edit.op?(c.op!=edit.op):0;
+		label();
+		next();
 	}
 }
+
+void button(int x1,int y1) {
+	first();
+	while(*c.op!=0) {
+		dull=edit.op?(c.op!=edit.op):0;
+		if(x<=x1 && x1<=x+o->w  && y<=y1 && y1<=y+o->h) {
+			switch(*c.op) {
+			case 1: switch(o->t) {
+					case command:
+						{ void (*f)(void)=(void *)o->data; f(); } return;
+					case compiled:
+						if(edit.op) { o->open=0; } else {edit.c1=o; o->open=1; }
+						draw(); return;
+				}
+			case 2: edit.op=c.op; return;
+			}
+		}
+		next();
+	}
+	edit.op=0;
+	draw();
+}
+
 
 void key(int k) {
-	switch(ops) {
-	case rename1: { key_rename1(k); } break;
-	default:;
+	if(edit.op&&*edit.op==1) {
+		switch(k) {
+		case XK_BackSpace:
+			edit.c1->s[strlen(edit.c1->s)]=0;
+			resize(edit.c1);
+			draw();
+			break;
+		case XK_Return:
+			edit.op=0; draw(); break;
+		default: {
+			int l=strlen(edit.c1->s);
+			edit.c1->s[l]=k;
+			edit.c1->s[l+1]=0;
+			resize(edit.c1);
+			draw();
+			}
+		}
+			
 	}
 }
 
 
-#if 1
+#if 0
 snd_pcm_t *alsa_h;
 
 int16_t soundbuf[2][2*441];
@@ -526,6 +404,7 @@ void alsa_init() {
        pthread_create(&sthread,0,alsa_run,0);
 }
 
-
+#else
+void alsa_init() {}
 #endif
 
