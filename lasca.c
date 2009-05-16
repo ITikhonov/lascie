@@ -35,6 +35,7 @@ union c { uint8_t *op; struct c1 *c1; struct c2 *c2; };
 
 struct e { struct e *p,*n; union c c; } editcode[1024] = {{0,0,{0}}};
 struct e *editcode_e=editcode+1;
+struct e *elast=editcode;
 
 void draw();
 
@@ -51,7 +52,7 @@ struct e *append(struct e *w) {
 	e->p=w;
 	e->n=w->n;
 	w->n=e;
-	if(e->n) e->n->p=e;
+	if(e->n) { e->n->p=e; } else { elast=e; }
 	return e;
 }
 
@@ -62,7 +63,7 @@ struct e *add(int x, int y, char *s, void *f, int len, int t) {
 	strncpy(c.c1->s,s,7);
 	resize(c.c1);
 
-	struct e *e=append(editcode);
+	struct e *e=append(elast);
 	e->c.op=c.op;
 	c.c1++;
 	drawcode_e=c.op;
@@ -74,11 +75,14 @@ struct e *edit=0;
 
 void do_create() { edit=add(100, 100, "", 0, 0, compiled); draw(); }
 
-int8_t hexext;
+void do_compile();
+
 
 void do_ping(void) { puts("PONG"); }
 
 void alsa_init();
+
+int8_t hexext;
 
 void init(cairo_t *cr1) {
 	cr=cr1;
@@ -96,6 +100,7 @@ void init(cairo_t *cr1) {
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
 	add(30,290,"ping", do_ping,0,command);
+	add(30,70,"compile", do_compile,0,command);
 	add(30,50,"exit", do_exit,0,command);
 	add(30,30,"create", do_create,0,command);
 
@@ -149,6 +154,36 @@ void draw() {
 		dull=edit&&e!=edit;
 		label();
 	}
+
+}
+
+union ic { uint8_t *b; int32_t *i; void *v; } cc;
+uint8_t ccode[65535];
+struct { int32_t *p; struct c1 *w; } decs[1024], *dec=decs;
+
+void do_compile() {
+	cc.b=ccode;
+	first();
+	int open=0;
+	while(next()) {
+		switch(*c.op) {
+		case 1: if(open) *cc.b++=0xc3; if(o->t==compiled) { open=1; o->data=cc.b; } break;
+		case 2: *cc.b++=0xe8;
+			if((o->t==compiled && o->data && o->data<=cc.v)||o->t==command) {
+				*cc.i++=(uint8_t *)o->data-(cc.b+4);
+			} else {
+				dec->p=cc.i; dec++->w=o;
+				*cc.i++=0;
+			}
+		}
+	}
+	*cc.b++=0xc3;
+
+	while(--dec>=decs) { *dec->p=(uint8_t *)dec->w->data-(uint8_t*)(dec->p+1); }
+
+	FILE *f=fopen("dump","w");
+	fwrite(ccode,65535,1,f);
+	fclose(f);
 }
 
 void button(int x1,int y1) {
@@ -175,7 +210,13 @@ void button(int x1,int y1) {
 			}
 		}
 	}
-	edit=0;
+
+	if(edit && *edit->c.op==1) {
+		edit->c.c1->x=x1;
+		edit->c.c1->y=y1;
+	} else {
+		edit=0;
+	}
 	draw();
 }
 
