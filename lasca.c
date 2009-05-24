@@ -21,9 +21,6 @@ int min(int x,int y) { return x>y?y:x; }
 static cairo_t *cr=0;
 int button_height=0;
 
-uint8_t drawcode[65535];
-uint8_t *drawcode_e=drawcode;
-
 uint32_t stack_place[16];
 uint32_t *stack = stack_place-1;
 
@@ -33,9 +30,15 @@ struct c1 { uint8_t op; uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint
 struct c2 { uint8_t op; int32_t p; };
 union c { uint8_t *op; struct c1 *c1; struct c2 *c2; };
 
-struct e { struct e *p,*n; union c c; } editcode[1024] = {{0,0,{0}}};
-struct e *editcode_e=editcode+1;
-struct e *elast=editcode;
+struct c1 words[256], *words_e = words;
+
+struct e { struct e *n; struct c1 *o; } editcode[1024];
+struct e *editcode_e=editcode;
+struct e heads[256], *heads_e = heads;
+
+struct c1 finalw = {1,0,0,30,0,";",compiled,0,0,0};
+struct e final = {0,&finalw};
+
 
 void draw();
 
@@ -47,33 +50,23 @@ void resize(struct c1 *c) {
 	c->w=te.x_advance+10; c->h=button_height+5;
 }
 
-struct e *append(struct e *w) {
-	struct e *e=editcode_e++;
-	e->p=w;
-	e->n=w->n;
-	w->n=e;
-	if(e->n) { e->n->p=e; } else { elast=e; }
-	return e;
-}
-
 struct e *add(int x, int y, char *s, void *f, int len, int t) {
-	union c c;
-	c.op=drawcode_e;
-	c.c1->op=1; c.c1->x=x; c.c1->y=y; c.c1->t=t; c.c1->data=f; c.c1->l=len;
-	strncpy(c.c1->s,s,7);
-	resize(c.c1);
+	struct c1 *c=words_e++;
+	c->op=1; c->x=x; c->y=y; c->t=t; c->data=f; c->l=len;
+	strncpy(c->s,s,7);
+	resize(c);
 
-	struct e *e=append(elast);
-	e->c.op=c.op;
-	c.c1++;
-	drawcode_e=c.op;
+	struct e *h=heads_e++;
+	h->o=c;
+	h->n=t==compiled?&final:0;
 
-	return e;
+	return h;
 }
 
+struct e *editp=0;
 struct e *edit=0;
 
-void do_create() { edit=add(100, 100, "", 0, 0, compiled); draw(); }
+void do_create() { editp=0; edit=add(100, 100, "", 0, 0, compiled); draw(); }
 
 void do_compile();
 
@@ -93,6 +86,7 @@ void init(cairo_t *cr1) {
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,"abcdefghijklmnopqrstuvwxyz0123456789;",&te);
 	button_height=te.height;
+	resize(&finalw);
 
 	int n;
 	char s[2]={0,0};
@@ -111,29 +105,9 @@ int dull=0;
 void padcolor() { if(!dull) { cairo_set_source_rgb(cr,0.5,0.9,0.5); } else { cairo_set_source_rgb(cr,0.8,0.8,0.8); } }
 void textcolor() { cairo_set_source_rgb(cr,0.0,0.0,0.0); }
 
-struct e *e;
-union c c;
 int x,y;
-struct c1 *o;
 
-void load() {
-	switch(*c.op) {
-	case 1: x=c.c1->x; y=c.c1->y; o=c.c1; return;
-	case 2: o=(struct c1 *)(drawcode+c.c2->p); return;
-	}
-}
-
-void first() { e=editcode; c.op=0; }
-int next() {
-	e=e->n;
-	if(!e) return 0;
-	if(c.op) { x+=o->w; }
-	c.op=e->c.op;
-	load();
-	return 1;
-}
-
-void label() {
+void label(struct c1 *o) {
 	padcolor();
 	cairo_rectangle(cr,x,y,o->w,o->h);
 	cairo_fill(cr);
@@ -145,15 +119,21 @@ void label() {
 
 }
 
+void drawlist(struct e *e) {
+	x=e->o->x; y=e->o->y;
+	for(e=e;e;e=e->n) {
+		dull = edit && edit!=e;
+		label(e->o);
+		x+=e->o->w;
+	}
+}
+
 void draw() {
 	cairo_set_source_rgb(cr,255,255,255);
 	cairo_paint(cr);
 
-	first();
-	while(next()) {
-		dull=edit&&e!=edit;
-		label();
-	}
+	struct e *e;
+	for(e=heads;e<heads_e;e++) { drawlist(e); }
 
 }
 
@@ -162,96 +142,64 @@ uint8_t ccode[65535];
 struct { int32_t *p; struct c1 *w; } decs[1024], *dec=decs;
 
 void do_compile() {
-	cc.b=ccode;
-	first();
-	int open=0;
-	while(next()) {
-		switch(*c.op) {
-		case 1: if(open) *cc.b++=0xc3; if(o->t==compiled) { open=1; o->data=cc.b; } break;
-		case 2: *cc.b++=0xe8;
-			if((o->t==compiled && o->data && o->data<=cc.v)||o->t==command) {
-				*cc.i++=(uint8_t *)o->data-(cc.b+4);
-			} else {
-				dec->p=cc.i; dec++->w=o;
-				*cc.i++=0;
+}
+
+
+int clicklist(struct e *e, int x1,int y1) {
+	x=e->o->x+e->o->w; y=e->o->y;
+	if(x1<=x) {
+		if(editp) {
+			struct e *e1=editcode_e++;
+			e1->o=e->o;
+			e1->n=edit;
+			editp->n=e1;
+			editp=e1;
+			draw(); return 1;
+		} else {
+			switch(e->o->t) {
+			case command: { void (*f)(void)=(void *)e->o->data; f(); return 1; }
+			case compiled: editp=0; edit=e; draw(); return 1;
 			}
 		}
 	}
-	*cc.b++=0xc3;
 
-	while(--dec>=decs) { *dec->p=(uint8_t *)dec->w->data-(uint8_t*)(dec->p+1); }
-
-	FILE *f=fopen("dump","w");
-	fwrite(ccode,65535,1,f);
-	fclose(f);
+	struct e *p=e;
+	for(e=e->n;e;e=e->n) {
+		x+=e->o->w;
+		if(x1<=x) { editp=p; edit=e; draw(); return 1; }
+		p=e;
+	}
+	return 0;
 }
 
 void button(int x1,int y1) {
-	first();
-	while(next()) {
-		if(x<=x1 && x1<=x+o->w  && y<=y1 && y1<=y+o->h) {
-			switch(*c.op) {
-			case 1: 
-				if(edit) {
-					edit=append(edit);
-					edit->c.op=drawcode_e;
-					edit->c.c2->op=2;
-					edit->c.c2->p=c.op-drawcode;
-					drawcode_e=(uint8_t*)(edit->c.c2+1);
-					draw();
-					return;
-				}
-
-				switch(o->t) {
-					case command: { void (*f)(void)=(void *)o->data; f(); } return;
-					case compiled: edit=e; draw(); return;
-				}
-			case 2:  edit=e; draw(); return;
-			}
-		}
+	struct e *e;
+	for(e=heads;e<heads_e;e++) {
+		if(e->o->y<=y1 && y1<=e->o->y+e->o->h && x1>e->o->x) { if(clicklist(e,x1,y1)) return; }
 	}
-
-	if(edit && *edit->c.op==1) {
-		edit->c.c1->x=x1;
-		edit->c.c1->y=y1;
-	} else {
-		edit=0;
-	}
+	editp=0; edit=0;
 	draw();
 }
 
-
 void key(int k) {
-	if(edit) {
-		if(*edit->c.op==1) {
-			union c c; c.op=edit->c.op;
-			switch(k) {
+	if(edit&&editp==0) {
+		struct e *e=edit;
+		switch(k) {
 			case XK_BackSpace:
-				c.c1->s[strlen(c.c1->s)]=0;
-				resize(c.c1);
+				e->o->s[strlen(e->o->s)-1]=0;
+				resize(e->o);
 				draw();
 				break;
 			case XK_Return:
-				c.op=0; draw(); break;
+				edit=0; draw(); break;
 			case '0'...'9':
 			case 'a'...'z': {
-				int l=strlen(c.c1->s);
-				c.c1->s[l]=k;
-				c.c1->s[l+1]=0;
-				resize(c.c1);
+				int l=strlen(e->o->s);
+				e->o->s[l]=k;
+				e->o->s[l+1]=0;
+				resize(e->o);
 				draw();
 				}
-			}
-				
-		} else {
-			switch(k) {
-			case XK_Delete:
-				edit->p->n=edit->n;
-				edit->n->p=edit->p;
-				edit=edit->p;
-				draw();
-				return;
-			}
 		}
 	}
 }
