@@ -182,24 +182,31 @@ void button(int x1,int y1) {
 }
 
 void key(int k) {
-	if(edit&&editp==0) {
-		struct e *e=edit;
-		switch(k) {
-			case XK_BackSpace:
-				e->o->s[strlen(e->o->s)-1]=0;
-				resize(e->o);
-				draw();
-				break;
-			case XK_Return:
-				edit=0; draw(); break;
-			case '0'...'9':
-			case 'a'...'z': {
-				int l=strlen(e->o->s);
-				e->o->s[l]=k;
-				e->o->s[l+1]=0;
-				resize(e->o);
-				draw();
-				}
+	if(edit) {
+		if(editp==0) {
+			struct e *e=edit;
+			switch(k) {
+				case XK_BackSpace:
+					e->o->s[strlen(e->o->s)-1]=0;
+					resize(e->o);
+					draw();
+					break;
+				case XK_Return:
+					editp=edit; edit=edit->n; draw(); break;
+				case '0'...'9':
+				case 'a'...'z': {
+					int l=strlen(e->o->s);
+					e->o->s[l]=k;
+					e->o->s[l+1]=0;
+					resize(e->o);
+					draw();
+					}
+			}
+		} else {
+			switch(k) {
+				case XK_Delete:
+					if(edit->n) editp->n=edit->n; edit=edit->n; draw(); break;
+			}
 		}
 	}
 }
