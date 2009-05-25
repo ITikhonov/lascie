@@ -31,25 +31,83 @@ struct c2 { uint8_t op; int32_t p; };
 union c { uint8_t *op; struct c1 *c1; struct c2 *c2; };
 
 struct c1 words[256], *words_e = words;
-struct c1 builtins[256], *builtins_e = builtins;
-
+struct c1 *user=0;
 struct e { struct e *n; struct c1 *o; } editcode[1024];
 struct e *editcode_e=editcode;
 struct e heads[256], *heads_e = heads;
+struct e *userh=0;
 
-struct c1 finalw = {1,0,0,30,0,";",compiled,0,0,0};
-struct e final = {0,&finalw};
-
+struct e *final=0;
 
 void draw();
 
 void do_exit() { exit(0); }
+
+void savelist(struct e *e, FILE *f) {
+	if(e->o<user) return;
+	fwrite(&e->o->x,4,1,f);
+	fwrite(&e->o->y,4,1,f);
+	fwrite(&e->o->s,8,1,f);
+	fwrite(&e->o->t,1,1,f);
+
+	for(e=e->n;e;e=e->n) {
+		int16_t n=e->o-user;
+		fwrite(&n,2,1,f);
+	}
+}
+
+void do_save() {
+	struct e *e;
+	FILE *f=fopen("save","w");
+	for(e=heads;e<heads_e;e++) { savelist(e,f); }
+	fclose(f);
+}
+
 
 void resize(struct c1 *c) {
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,c->s,&te);
 	c->w=te.x_advance+10; c->h=button_height+5;
 }
+
+
+int loadone(FILE *f) {
+	if(!fread(&words_e->x,4,1,f)) return 0;
+	fread(&words_e->y,4,1,f);
+	fread(&words_e->s,8,1,f);
+	fread(&words_e->t,1,1,f);
+	resize(words_e);
+	heads_e->o=words_e++;
+
+	struct e *e=heads_e++;
+
+	for(;;) {
+		int16_t n;
+		fread(&n,2,1,f);
+		editcode_e->o=user+n;
+		e->n=editcode_e;
+		e=editcode_e++;
+		
+		if(n==-1) break;
+	}
+	e->n=0;
+
+	return 1;
+}
+
+void do_load() {
+	words_e=user;
+	heads_e=userh;
+	editcode_e=editcode;
+
+	FILE *f=fopen("save","r");
+	while(loadone(f)) ;
+	fclose(f);
+
+	draw();
+}
+
+
 
 struct e *reg(struct c1 *c, int x, int y, char *s, void *f, int len, int t) {
 	c->op=1; c->x=x; c->y=y; c->t=t; c->data=f; c->l=len;
@@ -58,22 +116,18 @@ struct e *reg(struct c1 *c, int x, int y, char *s, void *f, int len, int t) {
 
 	struct e *h=heads_e++;
 	h->o=c;
-	h->n=t==compiled?&final:0;
+	h->n=t==compiled?final:0;
 	return h;
 }
 
-struct e *add(int x, int y, char *s, void *f, int len) {
-	return reg(words_e++,x,y,s,f,len,compiled);
-}
-
-struct e *addb(int x, int y, char *s, void *f, int len, int t) {
-	return reg(builtins_e++,x,y,s,f,len,t);
+struct e *add(int x, int y, char *s, void *f, int len, int t) {
+	return reg(words_e++,x,y,s,f,len,t);
 }
 
 struct e *editp=0;
 struct e *edit=0;
 
-void do_create() { editp=0; edit=add(100, 100, "", 0, 0); draw(); }
+void do_create() { editp=0; edit=add(100,100,"",0,0,compiled); draw(); }
 
 void do_compile();
 
@@ -93,18 +147,22 @@ void init(cairo_t *cr1) {
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,"abcdefghijklmnopqrstuvwxyz0123456789;",&te);
 	button_height=te.height;
-	resize(&finalw);
+	resize(words);
 
 	int n;
 	char s[2]={0,0};
 	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
-	addb(30,290,"ping", do_ping,0,command);
-	addb(30,70,"compile", do_compile,0,command);
-	addb(30,50,"exit", do_exit,0,command);
-	addb(30,30,"create", do_create,0,command);
-
+	add(30,250,"load", do_load,0,command);
+	add(30,270,"save", do_save,0,command);
+	add(30,290,"ping", do_ping,0,command);
+	add(30,70,"compile", do_compile,0,command);
+	add(30,50,"exit", do_exit,0,command);
+	add(30,30,"create", do_create,0,command);
+	final=add(0,0,";",do_ping,0,command);
+	user=words_e;
+	userh=heads_e;
 }
 
 int dull=0;
