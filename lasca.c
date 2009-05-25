@@ -31,6 +31,7 @@ struct c2 { uint8_t op; int32_t p; };
 union c { uint8_t *op; struct c1 *c1; struct c2 *c2; };
 
 struct c1 words[256], *words_e = words;
+struct c1 builtins[256], *builtins_e = builtins;
 
 struct e { struct e *n; struct c1 *o; } editcode[1024];
 struct e *editcode_e=editcode;
@@ -50,8 +51,7 @@ void resize(struct c1 *c) {
 	c->w=te.x_advance+10; c->h=button_height+5;
 }
 
-struct e *add(int x, int y, char *s, void *f, int len, int t) {
-	struct c1 *c=words_e++;
+struct e *reg(struct c1 *c, int x, int y, char *s, void *f, int len, int t) {
 	c->op=1; c->x=x; c->y=y; c->t=t; c->data=f; c->l=len;
 	strncpy(c->s,s,7);
 	resize(c);
@@ -59,14 +59,21 @@ struct e *add(int x, int y, char *s, void *f, int len, int t) {
 	struct e *h=heads_e++;
 	h->o=c;
 	h->n=t==compiled?&final:0;
-
 	return h;
+}
+
+struct e *add(int x, int y, char *s, void *f, int len) {
+	return reg(words_e++,x,y,s,f,len,compiled);
+}
+
+struct e *addb(int x, int y, char *s, void *f, int len, int t) {
+	return reg(builtins_e++,x,y,s,f,len,t);
 }
 
 struct e *editp=0;
 struct e *edit=0;
 
-void do_create() { editp=0; edit=add(100, 100, "", 0, 0, compiled); draw(); }
+void do_create() { editp=0; edit=add(100, 100, "", 0, 0); draw(); }
 
 void do_compile();
 
@@ -93,10 +100,10 @@ void init(cairo_t *cr1) {
 	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
-	add(30,290,"ping", do_ping,0,command);
-	add(30,70,"compile", do_compile,0,command);
-	add(30,50,"exit", do_exit,0,command);
-	add(30,30,"create", do_create,0,command);
+	addb(30,290,"ping", do_ping,0,command);
+	addb(30,70,"compile", do_compile,0,command);
+	addb(30,50,"exit", do_exit,0,command);
+	addb(30,30,"create", do_create,0,command);
 
 }
 
