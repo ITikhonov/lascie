@@ -19,31 +19,26 @@ int max(int x,int y) { return x>y?x:y; }
 int min(int x,int y) { return x>y?y:x; }
 
 static cairo_t *cr=0;
-int button_height=0;
-
-uint32_t stack_place[16];
-uint32_t *stack = stack_place-1;
+static int button_height=0;
 
 enum nmtype { compiled, data, macro, command };
 
-struct c1 { uint8_t op; uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; int open; };
-struct c2 { uint8_t op; int32_t p; };
-union c { uint8_t *op; struct c1 *c1; struct c2 *c2; };
+struct word { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; };
 
-struct c1 words[256], *words_e = words;
-struct c1 *user=0;
-struct e { struct e *n; struct c1 *o; } editcode[1024];
-struct e *editcode_e=editcode;
-struct e heads[256], *heads_e = heads;
-struct e *userh=0;
+static struct word words[256], *words_e = words;
+static struct word *user=0;
+static struct e { struct e *n; struct word *o; } editcode[1024];
+static struct e *editcode_e=editcode;
+static struct e heads[256], *heads_e = heads;
+static struct e *userh=0;
 
-struct e *final=0;
+static struct e *final=0;
 
 void draw();
 
-void do_exit() { exit(0); }
+static void do_exit() { exit(0); }
 
-void savelist(struct e *e, FILE *f) {
+inline void savelist(struct e *e, FILE *f) {
 	if(e->o<user) return;
 	fwrite(&e->o->x,4,1,f);
 	fwrite(&e->o->y,4,1,f);
@@ -56,7 +51,7 @@ void savelist(struct e *e, FILE *f) {
 	}
 }
 
-void do_save() {
+static void do_save() {
 	struct e *e;
 	FILE *f=fopen("save","w");
 	for(e=heads;e<heads_e;e++) { savelist(e,f); }
@@ -64,14 +59,14 @@ void do_save() {
 }
 
 
-void resize(struct c1 *c) {
+static void resize(struct word *c) {
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,c->s,&te);
 	c->w=te.x_advance+10; c->h=button_height+5;
 }
 
 
-int loadone(FILE *f) {
+inline int loadone(FILE *f) {
 	if(!fread(&words_e->x,4,1,f)) return 0;
 	fread(&words_e->y,4,1,f);
 	fread(&words_e->s,8,1,f);
@@ -95,7 +90,7 @@ int loadone(FILE *f) {
 	return 1;
 }
 
-void do_load() {
+static void do_load() {
 	words_e=user;
 	heads_e=userh;
 	editcode_e=editcode;
@@ -109,8 +104,9 @@ void do_load() {
 
 
 
-struct e *reg(struct c1 *c, int x, int y, char *s, void *f, int len, int t) {
-	c->op=1; c->x=x; c->y=y; c->t=t; c->data=f; c->l=len;
+static struct e *add(int x, int y, char *s, void *f, int len, int t) {
+	struct word *c=words_e++;
+	c->x=x; c->y=y; c->t=t; c->data=f; c->l=len;
 	strncpy(c->s,s,7);
 	resize(c);
 
@@ -120,23 +116,17 @@ struct e *reg(struct c1 *c, int x, int y, char *s, void *f, int len, int t) {
 	return h;
 }
 
-struct e *add(int x, int y, char *s, void *f, int len, int t) {
-	return reg(words_e++,x,y,s,f,len,t);
-}
+static struct e *editp=0;
+static struct e *edit=0;
 
-struct e *editp=0;
-struct e *edit=0;
+static void do_create() { editp=0; edit=add(100,100,"",0,0,compiled); draw(); }
 
-void do_create() { editp=0; edit=add(100,100,"",0,0,compiled); draw(); }
-
-void do_compile();
+static void do_compile();
 
 
-void do_ping(void) { puts("PONG"); }
+static void do_ping(void) { puts("PONG"); }
 
-void alsa_init();
-
-int8_t hexext;
+static int8_t hexext;
 
 void init(cairo_t *cr1) {
 	cr=cr1;
@@ -165,14 +155,14 @@ void init(cairo_t *cr1) {
 	userh=heads_e;
 }
 
-int dull=0;
+static int dull=0;
 
-void padcolor() { if(!dull) { cairo_set_source_rgb(cr,0.5,0.9,0.5); } else { cairo_set_source_rgb(cr,0.8,0.8,0.8); } }
-void textcolor() { cairo_set_source_rgb(cr,0.0,0.0,0.0); }
+inline void padcolor() { if(!dull) { cairo_set_source_rgb(cr,0.5,0.9,0.5); } else { cairo_set_source_rgb(cr,0.8,0.8,0.8); } }
+inline void textcolor() { cairo_set_source_rgb(cr,0.0,0.0,0.0); }
 
-int x,y;
+static int x,y;
 
-void label(struct c1 *o) {
+inline void label(struct word *o) {
 	padcolor();
 	cairo_rectangle(cr,x,y,o->w,o->h);
 	cairo_fill(cr);
@@ -184,7 +174,7 @@ void label(struct c1 *o) {
 
 }
 
-void drawlist(struct e *e) {
+inline void drawlist(struct e *e) {
 	x=e->o->x; y=e->o->y;
 	for(e=e;e;e=e->n) {
 		dull = edit && edit!=e;
@@ -202,15 +192,18 @@ void draw() {
 
 }
 
-union ic { uint8_t *b; int32_t *i; void *v; } cc;
-uint8_t ccode[65535];
-struct { int32_t *p; struct c1 *w; } decs[1024], *dec=decs;
+#if 0
+static union ic { uint8_t *b; int32_t *i; void *v; } cc;
+static uint8_t ccode[65535];
+static struct { int32_t *p; struct word *w; } decs[1024], *dec=decs;
+#endif
 
-void do_compile() {
+static void do_compile() {
 }
 
 
-int clicklist(struct e *e, int x1,int y1) {
+
+inline int clicklist(struct e *e, int x1,int y1) {
 	x=e->o->x+e->o->w; y=e->o->y;
 	if(x1<=x) {
 		if(editp) {
@@ -270,8 +263,9 @@ void key(int k) {
 		} else {
 			switch(k) {
 				case XK_Delete:
-					if(edit->n) editp->n=edit->n; edit=edit->n; draw(); break;
+					if(edit->n) { editp->n=edit->n; edit=edit->n; draw(); } break;
 			}
 		}
 	}
 }
+
