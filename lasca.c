@@ -21,7 +21,7 @@ int min(int x,int y) { return x>y?y:x; }
 static cairo_t *cr=0;
 static int button_height=0;
 
-enum nmtype { compiled, data, macro, command };
+enum nmflag { compiled, data, macro, command };
 
 struct word { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; };
 
@@ -122,6 +122,13 @@ static struct e *edit=0;
 static void do_create() { editp=0; edit=add(100,100,"",0,0,compiled); draw(); }
 
 static void do_compile();
+static void do_ret(struct e *e);
+static void do_if(struct e *e);
+static void do_close(struct e *e);
+
+static void do_execute() {
+	if(edit && edit->o->data) { void (*f)(void)=edit->o->data; f(); }
+}
 
 
 static void do_ping(void) { puts("PONG"); }
@@ -144,13 +151,17 @@ void init(cairo_t *cr1) {
 	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
+	add(30,290,"ping", do_ping,0,command);
+	add(30,310,"?", do_if,0,macro);
+	add(30,330,"}", do_close,0,macro);
+
 	add(30,250,"load", do_load,0,command);
 	add(30,270,"save", do_save,0,command);
-	add(30,290,"ping", do_ping,0,command);
+	add(30,90,"execute", do_execute,0,command);
 	add(30,70,"compile", do_compile,0,command);
 	add(30,50,"exit", do_exit,0,command);
 	add(30,30,"create", do_create,0,command);
-	final=add(0,0,";",do_ping,0,command);
+	final=add(0,0,";",do_ret,0,macro);
 	user=words_e;
 	userh=heads_e;
 }
@@ -192,15 +203,47 @@ void draw() {
 
 }
 
-#if 0
-static union ic { uint8_t *b; int32_t *i; void *v; } cc;
+static union ic { uint8_t *b; int8_t *c; int32_t *i; void *v; } cc;
 static uint8_t ccode[65535];
 static struct { int32_t *p; struct word *w; } decs[1024], *dec=decs;
-#endif
 
-static void do_compile() {
+static void do_ret(struct e *e) { *cc.b++=0xc3; }
+int8_t *fwjumps[8], **fwjump;
+static void do_if(struct e *e) {
+	*cc.b++=0x75;
+	*fwjump++=cc.c++;
+}
+static void do_close(struct e *e) {
+	--fwjump;
+	**fwjump = cc.b - (uint8_t*)((*fwjump)+1);
 }
 
+inline void compilelist(struct e *e) {
+	fwjump=fwjumps;
+	x=e->o->x; y=e->o->y;
+	for(;e;e=e->n) {
+		switch(e->o->t) {
+		case macro:
+			{ void (*f)(struct e *e) = e->o->data; f(e); } break;
+		default:
+			*cc.b++=0xe8;
+			if(e->o->data == 0) { dec->p=cc.i++; dec->w=e->o; dec++; }
+			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
+		}
+	}
+}
+
+static void do_compile() {
+	cc.b=ccode;
+	struct e *e;
+	for(e=heads;e<heads_e;e++) {
+		if(e->o->t==compiled) {
+			e->o->data=cc.b;
+			compilelist(e->n);
+		}
+	}
+	while(--dec>=decs) { *dec->p=(uint8_t *)dec->w->data-(uint8_t*)(dec->p+1); }
+}
 
 
 inline int clicklist(struct e *e, int x1,int y1) {
@@ -235,6 +278,9 @@ void button(int x1,int y1) {
 	for(e=heads;e<heads_e;e++) {
 		if(e->o->y<=y1 && y1<=e->o->y+e->o->h && x1>e->o->x) { if(clicklist(e,x1,y1)) return; }
 	}
+
+	if(edit&&!editp) { edit->o->x=x1 & 0xfffffff0; edit->o->y=y1 & 0xfffffff0; draw(); return;}
+
 	editp=0; edit=0;
 	draw();
 }
