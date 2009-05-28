@@ -21,7 +21,7 @@ int min(int x,int y) { return x>y?y:x; }
 static cairo_t *cr=0;
 static int button_height=0;
 
-enum nmflag { compiled, data, macro, command };
+enum nmflag { compiled, data, macro, command, number };
 
 struct word { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; };
 
@@ -37,6 +37,8 @@ static struct e *final=0;
 void draw();
 
 static void do_exit() { exit(0); }
+
+
 
 inline void savelist(struct e *e, FILE *f) {
 	if(e->o<user) return;
@@ -120,18 +122,33 @@ static struct e *editp=0;
 static struct e *edit=0;
 
 static void do_create() { editp=0; edit=add(100,100,"",0,0,compiled); draw(); }
+static void do_number() { if(edit) edit->o->t=number; draw(); }
 
 static void do_compile();
 static void do_ret(struct e *e);
 static void do_if(struct e *e);
 static void do_close(struct e *e);
 
+uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
+
 static void do_execute() {
-	if(edit && edit->o->data) { void (*f)(void)=edit->o->data; f(); }
+	if(edit && edit->o->data) {
+		asm volatile (
+			"movl stack,%%esi; lodsl;"
+			"call *%%edx;"
+			"leal -4(%%esi),%%esi;"
+			"movl %%eax,(%%esi);"
+			"movl %%esi,stack"
+			: : "d" (edit->o->data) : "esi","eax","memory"
+		);
+	}
+	draw();
 }
 
 
 static void do_ping(void) { puts("PONG"); }
+static void compile_dup();
+static void compile_drop();
 
 static int8_t hexext;
 
@@ -154,14 +171,18 @@ void init(cairo_t *cr1) {
 	add(30,290,"ping", do_ping,0,command);
 	add(30,310,"?", do_if,0,macro);
 	add(30,330,"}", do_close,0,macro);
+	add(60,330,"dup", compile_dup,0,macro);
+	add(90,330,"drop", compile_drop,0,macro);
 
 	add(30,250,"load", do_load,0,command);
 	add(30,270,"save", do_save,0,command);
+
+	add(30,110,"number", do_number,0,command);
 	add(30,90,"execute", do_execute,0,command);
 	add(30,70,"compile", do_compile,0,command);
 	add(30,50,"exit", do_exit,0,command);
 	add(30,30,"create", do_create,0,command);
-	final=add(0,0,";",do_ret,0,macro);
+	final=add(30,130,";",do_ret,0,macro);
 	user=words_e;
 	userh=heads_e;
 }
@@ -169,20 +190,49 @@ void init(cairo_t *cr1) {
 static int dull=0;
 
 inline void padcolor() { if(!dull) { cairo_set_source_rgb(cr,0.5,0.9,0.5); } else { cairo_set_source_rgb(cr,0.8,0.8,0.8); } }
-inline void textcolor() { cairo_set_source_rgb(cr,0.0,0.0,0.0); }
+inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
+inline void numbercolor() { cairo_set_source_rgb(cr,0.5,0.5,0.9); }
+inline void macrocolor() { cairo_set_source_rgb(cr,0.9,0.5,0.9); }
+inline void commandcolor() { cairo_set_source_rgb(cr,0.9,0.5,0.5); }
+inline void datacolor() { cairo_set_source_rgb(cr,0.9,0.9,0.5); }
 
 static int x,y;
 
 inline void label(struct word *o) {
-	padcolor();
+	if(dull) padcolor();
+	else {
+		switch(o->t) {
+		case number:	numbercolor(); break;
+		case compiled:	padcolor(); break;
+		case macro:	macrocolor(); break;
+		case data:	datacolor(); break;
+		case command:	commandcolor(); break;
+		}
+	}
+
 	cairo_rectangle(cr,x,y,o->w,o->h);
 	cairo_fill(cr);
 
 	textcolor();
+	
 	cairo_move_to(cr, x+5, y+button_height);
 	cairo_show_text(cr, o->s);
 	cairo_stroke(cr);
 
+}
+
+void drawstack() {
+	char s[10];
+	cairo_move_to(cr, 5, 5+button_height);
+	uint32_t *p=stack;
+
+	textcolor();
+	while(p<stackh+32) {
+		sprintf(s,"%x ",*p);
+		cairo_show_text(cr, s);
+		p++;
+	}
+	cairo_stroke(cr);
 }
 
 inline void drawlist(struct e *e) {
@@ -201,6 +251,7 @@ void draw() {
 	struct e *e;
 	for(e=heads;e<heads_e;e++) { drawlist(e); }
 
+	drawstack();
 }
 
 static union ic { uint8_t *b; int8_t *c; int32_t *i; void *v; } cc;
@@ -218,13 +269,27 @@ static void do_close(struct e *e) {
 	**fwjump = cc.b - (uint8_t*)((*fwjump)+1);
 }
 
+static void compile_dup() {
+	*cc.b++=0x8d; *cc.b++=0x76; *cc.b++=0xfc;
+	*cc.b++=0x89; *cc.b++=0x06;
+}
+
+static void compile_drop() {
+	*cc.b++=0xad;
+}
+
+static void compile_imm(int32_t x) {
+	*cc.b++=0xb8;
+	*cc.i++=x;
+}
+
 inline void compilelist(struct e *e) {
 	e->o->data=cc.b;
 	fwjump=fwjumps;
 	for(e=e->n;e;e=e->n) {
 		switch(e->o->t) {
-		case macro:
-			{ void (*f)(struct e *e) = e->o->data; f(e); } break;
+		case macro: { void (*f)(struct e *e) = e->o->data; f(e); } break;
+		case number: { compile_dup(); compile_imm(atoi(e->o->s)); } break;
 		default:
 			*cc.b++=0xe8;
 			if(e->o->data == 0) { dec->p=cc.i++; dec->w=e->o; dec++; }
