@@ -219,9 +219,9 @@ static void do_close(struct e *e) {
 }
 
 inline void compilelist(struct e *e) {
+	e->o->data=cc.b;
 	fwjump=fwjumps;
-	x=e->o->x; y=e->o->y;
-	for(;e;e=e->n) {
+	for(e=e->n;e;e=e->n) {
 		switch(e->o->t) {
 		case macro:
 			{ void (*f)(struct e *e) = e->o->data; f(e); } break;
@@ -237,10 +237,7 @@ static void do_compile() {
 	cc.b=ccode;
 	struct e *e;
 	for(e=heads;e<heads_e;e++) {
-		if(e->o->t==compiled) {
-			e->o->data=cc.b;
-			compilelist(e->n);
-		}
+		if(e->o->t==compiled) { compilelist(e); }
 	}
 	while(--dec>=decs) { *dec->p=(uint8_t *)dec->w->data-(uint8_t*)(dec->p+1); }
 }
