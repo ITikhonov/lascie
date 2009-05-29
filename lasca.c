@@ -127,7 +127,10 @@ static void do_number() { if(edit) edit->o->t=number; draw(); }
 static void do_compile();
 static void do_ret(struct e *e);
 static void do_if(struct e *e);
-static void do_close(struct e *e);
+static void compile_notif(struct e *e);
+static void do_end(struct e *e);
+static void compile_begin(struct e *e);
+static void compile_rewind(struct e *e);
 
 uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
 
@@ -149,6 +152,7 @@ static void do_execute() {
 static void do_ping(void) { puts("PONG"); }
 static void compile_dup();
 static void compile_drop();
+static void compile_dec();
 
 static int8_t hexext;
 
@@ -168,11 +172,15 @@ void init(cairo_t *cr1) {
 	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
+	add(220,310,"!?", compile_notif,0,macro);
 	add(30,290,"ping", do_ping,0,command);
 	add(30,310,"?", do_if,0,macro);
-	add(30,330,"}", do_close,0,macro);
+	add(30,330,"}", do_end,0,macro);
 	add(60,330,"dup", compile_dup,0,macro);
 	add(90,330,"drop", compile_drop,0,macro);
+	add(130,330,"1-", compile_dec,0,macro);
+	add(160,330,"{", compile_begin,0,macro);
+	add(190,330,"<<", compile_rewind,0,macro);
 
 	add(30,250,"load", do_load,0,command);
 	add(30,270,"save", do_save,0,command);
@@ -264,9 +272,23 @@ static void do_if(struct e *e) {
 	*cc.b++=0x75;
 	*fwjump++=cc.c++;
 }
-static void do_close(struct e *e) {
+static void compile_notif(struct e *e) {
+	*cc.b++=0x74;
+	*fwjump++=cc.c++;
+}
+static void do_end(struct e *e) {
 	--fwjump;
 	**fwjump = cc.b - (uint8_t*)((*fwjump)+1);
+}
+
+int8_t *bwjumps[8], **bwjump;
+static void compile_begin(struct e *e) {
+	*bwjump++=cc.c;
+}
+static void compile_rewind(struct e *e) {
+	--bwjump;
+	*cc.b++=0xeb;
+	*cc.c++=*bwjump-(cc.c+1);
 }
 
 static void compile_dup() {
@@ -278,6 +300,10 @@ static void compile_drop() {
 	*cc.b++=0xad;
 }
 
+static void compile_dec() {
+	*cc.b++=0x48;
+}
+
 static void compile_imm(int32_t x) {
 	*cc.b++=0xb8;
 	*cc.i++=x;
@@ -286,14 +312,19 @@ static void compile_imm(int32_t x) {
 inline void compilelist(struct e *e) {
 	e->o->data=cc.b;
 	fwjump=fwjumps;
+	bwjump=bwjumps;
 	for(e=e->n;e;e=e->n) {
 		switch(e->o->t) {
 		case macro: { void (*f)(struct e *e) = e->o->data; f(e); } break;
 		case number: { compile_dup(); compile_imm(atoi(e->o->s)); } break;
 		default:
+			if(e->o->t==command) { compile_dup(); }
 			*cc.b++=0xe8;
 			if(e->o->data == 0) { dec->p=cc.i++; dec->w=e->o; dec++; }
-			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
+			else {
+				*cc.i++=((uint8_t*)e->o->data)-(cc.b+4);
+			}
+			if(e->o->t==command) { compile_drop(); }
 		}
 	}
 }
