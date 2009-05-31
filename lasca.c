@@ -21,9 +21,9 @@ int min(int x,int y) { return x>y?y:x; }
 static cairo_t *cr=0;
 static int button_height=0;
 
-enum nmflag { compiled, data, macro, command, number };
+enum nmflag { compiled, data, macro, command };
 
-struct word { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; };
+struct word { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; };
 
 static struct word words[256], *words_e = words;
 static struct word *user=0;
@@ -60,11 +60,10 @@ static void do_save() {
 	fclose(f);
 }
 
-
 static void resize(struct word *c) {
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,c->s,&te);
-	c->w=te.x_advance+10; c->h=button_height+5;
+	c->w=te.x_advance+(c->nospace?0:10); c->h=button_height+5;
 }
 
 
@@ -105,10 +104,10 @@ static void do_load() {
 }
 
 
-
+int nospace=0;
 static struct e *add(int x, int y, char *s, void *f, int len, int t) {
 	struct word *c=words_e++;
-	c->x=x; c->y=y; c->t=t; c->data=f; c->l=len;
+	c->x=x; c->y=y; c->t=t; c->data=f; c->l=len; c->nospace=nospace;
 	strncpy(c->s,s,7);
 	resize(c);
 
@@ -122,7 +121,6 @@ static struct e *editp=0;
 static struct e *edit=0;
 
 static void do_create() { editp=0; edit=add(100,100,"",0,0,compiled); draw(); }
-static void do_number() { if(edit) edit->o->t=number; draw(); }
 
 static void do_compile();
 static void do_ret(struct e *e);
@@ -131,6 +129,19 @@ static void compile_notif(struct e *e);
 static void do_end(struct e *e);
 static void compile_begin(struct e *e);
 static void compile_rewind(struct e *e);
+
+void compile_neg(struct e *e);
+static void compile_0(struct e *e);
+static void compile_1(struct e *e);
+static void compile_2(struct e *e);
+static void compile_3(struct e *e);
+static void compile_4(struct e *e);
+static void compile_5(struct e *e);
+static void compile_6(struct e *e);
+static void compile_7(struct e *e);
+static void compile_8(struct e *e);
+static void compile_9(struct e *e);
+static void compile_d(struct e *e);
 
 uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
 
@@ -172,6 +183,25 @@ void init(cairo_t *cr1) {
 	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
+	nospace=1;
+	add(300,310,"d", compile_d,0,macro);
+	add(300,290,"0", compile_0,0,macro);
+	add(300,330,"-", compile_neg,0,macro);
+
+	add(320,290,"1", compile_1,0,macro);
+	add(335,290,"2", compile_2,0,macro);
+	add(350,290,"3", compile_3,0,macro);
+
+	add(320,310,"4", compile_4,0,macro);
+	add(335,310,"5", compile_5,0,macro);
+	add(350,310,"6", compile_6,0,macro);
+
+	add(320,330,"7", compile_7,0,macro);
+	add(335,330,"8", compile_8,0,macro);
+	add(350,330,"9", compile_9,0,macro);
+	nospace=0;
+
+
 	add(220,310,"!?", compile_notif,0,macro);
 	add(30,290,"ping", do_ping,0,command);
 	add(30,310,"?", do_if,0,macro);
@@ -185,7 +215,7 @@ void init(cairo_t *cr1) {
 	add(30,250,"load", do_load,0,command);
 	add(30,270,"save", do_save,0,command);
 
-	add(30,110,"number", do_number,0,command);
+	add(30,110,"ph", do_ping,0,command);
 	add(30,90,"execute", do_execute,0,command);
 	add(30,70,"compile", do_compile,0,command);
 	add(30,50,"exit", do_exit,0,command);
@@ -199,7 +229,6 @@ static int dull=0;
 
 inline void padcolor() { if(!dull) { cairo_set_source_rgb(cr,0.5,0.9,0.5); } else { cairo_set_source_rgb(cr,0.8,0.8,0.8); } }
 inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
-inline void numbercolor() { cairo_set_source_rgb(cr,0.5,0.5,0.9); }
 inline void macrocolor() { cairo_set_source_rgb(cr,0.9,0.5,0.9); }
 inline void commandcolor() { cairo_set_source_rgb(cr,0.9,0.5,0.5); }
 inline void datacolor() { cairo_set_source_rgb(cr,0.9,0.9,0.5); }
@@ -210,7 +239,6 @@ inline void label(struct word *o) {
 	if(dull) padcolor();
 	else {
 		switch(o->t) {
-		case number:	numbercolor(); break;
 		case compiled:	padcolor(); break;
 		case macro:	macrocolor(); break;
 		case data:	datacolor(); break;
@@ -223,7 +251,7 @@ inline void label(struct word *o) {
 
 	textcolor();
 	
-	cairo_move_to(cr, x+5, y+button_height);
+	cairo_move_to(cr, x+(o->nospace?0:5), y+button_height);
 	cairo_show_text(cr, o->s);
 	cairo_stroke(cr);
 
@@ -266,6 +294,23 @@ static union ic { uint8_t *b; int8_t *c; int32_t *i; void *v; } cc;
 static uint8_t ccode[65535];
 static struct { int32_t *p; struct word *w; } decs[1024], *dec=decs;
 
+static void compile_imm(int32_t x) { *cc.b++=0xb8; *cc.i++=x; }
+
+int n=0, n_sign=1;
+void nend(struct e *e) { if(!e->n->o->nospace) compile_d(e); }
+void compile_neg(struct e *e) { n_sign=-1; nend(e); }
+void compile_0(struct e *e) { n=n*10; nend(e);}
+void compile_1(struct e *e) { n=n*10+1; nend(e); }
+void compile_2(struct e *e) { n=n*10+2; nend(e); }
+void compile_3(struct e *e) { n=n*10+3; nend(e); }
+void compile_4(struct e *e) { n=n*10+4; nend(e); }
+void compile_5(struct e *e) { n=n*10+5; nend(e); }
+void compile_6(struct e *e) { n=n*10+6; nend(e); }
+void compile_7(struct e *e) { n=n*10+7; nend(e); }
+void compile_8(struct e *e) { n=n*10+8; nend(e); }
+void compile_9(struct e *e) { n=n*10+9; nend(e); }
+void compile_d(struct e *e) { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; }
+
 static void do_ret(struct e *e) { *cc.b++=0xc3; }
 int8_t *fwjumps[8], **fwjump;
 static void do_if(struct e *e) {
@@ -304,10 +349,6 @@ static void compile_dec() {
 	*cc.b++=0x48;
 }
 
-static void compile_imm(int32_t x) {
-	*cc.b++=0xb8;
-	*cc.i++=x;
-}
 
 inline void compilelist(struct e *e) {
 	e->o->data=cc.b;
@@ -316,7 +357,6 @@ inline void compilelist(struct e *e) {
 	for(e=e->n;e;e=e->n) {
 		switch(e->o->t) {
 		case macro: { void (*f)(struct e *e) = e->o->data; f(e); } break;
-		case number: { compile_dup(); compile_imm(atoi(e->o->s)); } break;
 		default:
 			if(e->o->t==command) { compile_dup(); }
 			*cc.b++=0xe8;
