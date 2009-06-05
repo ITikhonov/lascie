@@ -38,8 +38,6 @@ void draw();
 
 static void do_exit() { exit(0); }
 
-
-
 inline void savelist(struct e *e, FILE *f) {
 	if(e->o<user) return;
 	fwrite(&e->o->x,4,1,f);
@@ -142,20 +140,23 @@ static void compile_7(struct e *e);
 static void compile_8(struct e *e);
 static void compile_9(struct e *e);
 static void compile_d(struct e *e);
+static void compile_data(struct e *e);
 
 uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
 
+static void execute(void (*f)(void)) {
+	asm volatile (
+		"movl stack,%%esi; lodsl;"
+		"call *%%edx;"
+		"leal -4(%%esi),%%esi;"
+		"movl %%eax,(%%esi);"
+		"movl %%esi,stack"
+		: : "d" (f) : "esi","eax","memory"
+	);
+}
+
 static void do_execute() {
-	if(edit && edit->o->data) {
-		asm volatile (
-			"movl stack,%%esi; lodsl;"
-			"call *%%edx;"
-			"leal -4(%%esi),%%esi;"
-			"movl %%eax,(%%esi);"
-			"movl %%esi,stack"
-			: : "d" (edit->o->data) : "esi","eax","memory"
-		);
-	}
+	if(edit && edit->o->data) { execute(edit->o->data); }
 	draw();
 }
 
@@ -183,7 +184,10 @@ void init(cairo_t *cr1) {
 	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
+	add(50,310,"data", compile_data,0,macro);
+
 	nospace=1;
+
 	add(300,310,"d", compile_d,0,macro);
 	add(300,290,"0", compile_0,0,macro);
 	add(300,330,"-", compile_neg,0,macro);
@@ -311,6 +315,27 @@ void compile_8(struct e *e) { n=n*10+8; nend(e); }
 void compile_9(struct e *e) { n=n*10+9; nend(e); }
 void compile_d(struct e *e) { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; }
 
+struct e *compilednow=0;
+
+void do_data() {
+	register uint32_t *stack asm("esi");
+	printf("alloc: %u %u\n",stack[0],stack[1]);
+	compilednow->o->data=realloc((void *)stack[0],stack[1]);
+	printf(" -> %u\n",(uint32_t)(compilednow->o->data));
+}
+
+void compile_data(struct e *e) {
+	compilednow->o->t=data;
+	compile_dup();
+	compile_imm((int32_t)compilednow->o->data);
+	compile_dup();
+	*cc.b++=0xe8;
+	*cc.i++=((uint8_t*)do_data)-(cc.b+4);
+	compile_drop();
+	compile_drop();
+	compile_drop();
+}
+
 static void do_ret(struct e *e) { *cc.b++=0xc3; }
 int8_t *fwjumps[8], **fwjump;
 static void do_if(struct e *e) {
@@ -349,33 +374,47 @@ static void compile_dec() {
 	*cc.b++=0x48;
 }
 
+static void delay(struct word *w) {
+	dec->p=cc.i++; dec->w=w; dec++;
+}
 
 inline void compilelist(struct e *e) {
-	e->o->data=cc.b;
+	compilednow=e;
+	void *beginning=cc.b;
 	fwjump=fwjumps;
 	bwjump=bwjumps;
 	for(e=e->n;e;e=e->n) {
 		switch(e->o->t) {
 		case macro: { void (*f)(struct e *e) = e->o->data; f(e); } break;
+		case data:
+			compile_dup();
+			*cc.b++=0xb8;
+			delay(e->o);
+			break;
 		default:
 			if(e->o->t==command) { compile_dup(); }
 			*cc.b++=0xe8;
-			if(e->o->data == 0) { dec->p=cc.i++; dec->w=e->o; dec++; }
-			else {
-				*cc.i++=((uint8_t*)e->o->data)-(cc.b+4);
-			}
+			if(e->o->data == 0 || compilednow->o<e->o) delay(e->o);
+			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
 			if(e->o->t==command) { compile_drop(); }
 		}
 	}
+	compilednow->o->data=beginning;
 }
 
 static void do_compile() {
 	cc.b=ccode;
 	struct e *e;
+	dec=decs;
 	for(e=heads;e<heads_e;e++) {
-		if(e->o->t==compiled) { compilelist(e); }
+		if(e->o->t==compiled||e->o->t==data) { compilelist(e); }
 	}
-	while(--dec>=decs) { *dec->p=(uint8_t *)dec->w->data-(uint8_t*)(dec->p+1); }
+	for(e=heads;e<heads_e;e++) {
+		if(e->o->t==data) { compilednow=e; execute(e->o->data); }
+	}
+	while(--dec>=decs) {
+		*dec->p=dec->w->t==data?((uint32_t)dec->w->data) : ((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
+	}
 }
 
 
