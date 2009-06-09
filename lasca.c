@@ -23,11 +23,11 @@ static int button_height=0;
 
 enum nmflag { compiled, data, macro, command };
 
-struct word { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; };
+struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; };
 
-static struct word words[256], *words_e = words;
-static struct word *user=0;
-static struct e { struct e *n; struct word *o; } editcode[1024];
+static struct tag tags[256], *tags_e = tags;
+static struct tag *user=0;
+static struct e { struct e *n; struct tag *o; } editcode[1024];
 static struct e *editcode_e=editcode;
 
 struct voc { struct e heads[256], *end; };
@@ -64,53 +64,20 @@ static void do_save() {
 	fclose(f);
 }
 
-static void resize(struct word *c) {
+static void resize(struct tag *c) {
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,c->s,&te);
 	c->w=te.x_advance+(c->nospace?0:10); c->h=button_height+5;
 }
 
 
-inline int loadone(FILE *f) {
-	if(!fread(&words_e->x,4,1,f)) return 0;
-	fread(&words_e->y,4,1,f);
-	fread(&words_e->s,8,1,f);
-	fread(&words_e->t,1,1,f);
-	resize(words_e);
-	heads_e->o=words_e++;
-
-	struct e *e=heads_e++;
-
-	for(;;) {
-		int16_t n;
-		fread(&n,2,1,f);
-		editcode_e->o=user+n;
-		e->n=editcode_e;
-		e=editcode_e++;
-		
-		if(n==-1) break;
-	}
-	e->n=0;
-
-	return 1;
-}
-
 static void do_load() {
-	words_e=user;
-	heads_e=userh;
-	editcode_e=editcode;
-
-	FILE *f=fopen("save","r");
-	while(loadone(f)) ;
-	fclose(f);
-
-	draw();
 }
 
 
 int nospace=0;
 static struct e *add(int x, int y, char *s, void *f, int len, int t) {
-	struct word *c=words_e++;
+	struct tag *c=tags_e++;
 	c->x=x; c->y=y; c->t=t; c->data=f; c->l=len; c->nospace=nospace;
 	strncpy(c->s,s,7);
 	resize(c);
@@ -187,7 +154,7 @@ void init(cairo_t *cr1) {
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,"abcdefghijklmnopqrstuvwxyz0123456789;",&te);
 	button_height=te.height;
-	resize(words);
+	resize(tags);
 
 	int n;
 	char s[2]={0,0};
@@ -235,7 +202,7 @@ void init(cairo_t *cr1) {
 	add(30,50,"exit", do_exit,0,command);
 	add(30,30,"create", do_create,0,command);
 	final=add(30,130,";",do_ret,0,macro);
-	user=words_e;
+	user=tags_e;
 	userh=heads_e;
 }
 
@@ -249,7 +216,7 @@ inline void datacolor() { cairo_set_source_rgb(cr,0.9,0.9,0.5); }
 
 static int x,y;
 
-inline void label(struct word *o) {
+inline void label(struct tag *o) {
 	if(dull) padcolor();
 	else {
 		switch(o->t) {
@@ -307,7 +274,7 @@ void draw() {
 
 static union ic { uint8_t *b; int8_t *c; int32_t *i; void *v; } cc;
 static uint8_t ccode[65535];
-static struct { int32_t *p; struct word *w; } decs[1024], *dec=decs;
+static struct { int32_t *p; struct tag *w; } decs[1024], *dec=decs;
 
 static void compile_imm(int32_t x) { *cc.b++=0xb8; *cc.i++=x; }
 
@@ -385,7 +352,7 @@ static void compile_dec() {
 	*cc.b++=0x48;
 }
 
-static void delay(struct word *w) {
+static void delay(struct tag *w) {
 	dec->p=cc.i++; dec->w=w; dec++;
 }
 
