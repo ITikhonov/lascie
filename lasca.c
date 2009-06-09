@@ -33,10 +33,7 @@ static struct e *editcode_e=editcode;
 struct voc { struct e heads[256], *end; };
 
 struct voc macros = {.end=macros.heads};
-
-static struct e heads[256], *heads_e = heads;
-
-static struct e *userh=0;
+struct voc words = {.end=words.heads};
 
 static struct e *final=0;
 
@@ -60,7 +57,7 @@ inline void savelist(struct e *e, FILE *f) {
 static void do_save() {
 	struct e *e;
 	FILE *f=fopen("save","w");
-	for(e=heads;e<heads_e;e++) { savelist(e,f); }
+	for(e=words.heads;e<words.end;e++) { savelist(e,f); }
 	fclose(f);
 }
 
@@ -85,7 +82,7 @@ static struct e *add(int x, int y, char *s, void *f, int len, int t) {
 	struct e *h;
 	switch(t) {
 	case macro: h=macros.end++; break;
-	default: h=heads_e++;
+	default: h=words.end++;
 	}
 	h->o=c;
 	h->n=t==compiled?final:0;
@@ -202,8 +199,6 @@ void init(cairo_t *cr1) {
 	add(30,50,"exit", do_exit,0,command);
 	add(30,30,"create", do_create,0,command);
 	final=add(30,130,";",do_ret,0,macro);
-	user=tags_e;
-	userh=heads_e;
 }
 
 static int dull=0;
@@ -267,7 +262,7 @@ void draw() {
 
 	struct e *e;
 	for(e=macros.heads;e<macros.end;e++) { drawlist(e); }
-	for(e=heads;e<heads_e;e++) { drawlist(e); }
+	for(e=words.heads;e<words.end;e++) { drawlist(e); }
 
 	drawstack();
 }
@@ -384,10 +379,10 @@ static void do_compile() {
 	cc.b=ccode;
 	struct e *e;
 	dec=decs;
-	for(e=heads;e<heads_e;e++) {
+	for(e=words.heads;e<words.end;e++) {
 		if(e->o->t==compiled||e->o->t==data) { compilelist(e); }
 	}
-	for(e=heads;e<heads_e;e++) {
+	for(e=words.heads;e<words.end;e++) {
 		if(e->o->t==data) { compilednow=e; execute(e->o->data); }
 	}
 	while(--dec>=decs) {
@@ -427,7 +422,7 @@ inline int clicklist(struct e *e, int x1,int y1) {
 void button(int x1,int y1) {
 	struct e *e;
 	for(e=macros.heads;e<macros.end;e++) { if(clicklist(e,x1,y1)) return; }
-	for(e=heads;e<heads_e;e++) { if(clicklist(e,x1,y1)) return; }
+	for(e=words.heads;e<words.end;e++) { if(clicklist(e,x1,y1)) return; }
 
 	if(edit&&!editp) { edit->o->x=x1 & 0xfffffff0; edit->o->y=y1 & 0xfffffff0; draw(); return;}
 
