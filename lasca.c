@@ -192,27 +192,21 @@ void init(cairo_t *cr1) {
 	final=add(30,130,";",do_ret,0,macro);
 }
 
-static int dull=0;
+float *padcolor;
+float normalcolor[] ={0.5,0.9,0.5};
+float macrocolor[]  ={0.9,0.5,0.9};
+float commandcolor[]={0.9,0.5,0.5};
+float datacolor[]   ={0.9,0.9,0.5};
 
-inline void padcolor() { if(!dull) { cairo_set_source_rgb(cr,0.5,0.9,0.5); } else { cairo_set_source_rgb(cr,0.8,0.8,0.8); } }
+inline void setpadcolor() { cairo_set_source_rgb(cr,padcolor[0],padcolor[1],padcolor[2]); }
+inline void dullcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.8); }
+
 inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
-inline void macrocolor() { cairo_set_source_rgb(cr,0.9,0.5,0.9); }
-inline void commandcolor() { cairo_set_source_rgb(cr,0.9,0.5,0.5); }
-inline void datacolor() { cairo_set_source_rgb(cr,0.9,0.9,0.5); }
+
 
 static int x,y;
 
 inline void label(struct tag *o) {
-	if(dull) padcolor();
-	else {
-		switch(o->t) {
-		case compiled:	padcolor(); break;
-		case macro:	macrocolor(); break;
-		case data:	datacolor(); break;
-		case command:	commandcolor(); break;
-		}
-	}
-
 	cairo_rectangle(cr,x,y,o->w,o->h);
 	cairo_fill(cr);
 
@@ -241,7 +235,7 @@ void drawstack() {
 inline void drawlist(struct e *e) {
 	x=e->o->x; y=e->o->y;
 	for(e=e;e;e=e->n) {
-		dull = edit && edit!=e;
+		if(edit && edit!=e) dullcolor(); else setpadcolor();
 		label(e->o);
 		x+=e->o->w;
 	}
@@ -252,9 +246,9 @@ void draw() {
 	cairo_paint(cr);
 
 	struct e *e;
-	for(e=macros.heads;e<macros.end;e++) { drawlist(e); }
-	for(e=words.heads;e<words.end;e++) { drawlist(e); }
-	for(e=commands.heads;e<commands.end;e++) { drawlist(e); }
+	for(e=macros.heads;e<macros.end;e++) { padcolor=macrocolor; drawlist(e); }
+	for(e=words.heads;e<words.end;e++) { padcolor=normalcolor; drawlist(e); }
+	for(e=commands.heads;e<commands.end;e++) { padcolor=commandcolor; drawlist(e); }
 
 	drawstack();
 }
@@ -398,11 +392,11 @@ inline int clicklist(struct e *e, int x1,int y1) {
 			e1->n=edit;
 			editp->n=e1;
 			editp=e1;
-			draw(); return 1;
 		} else {
-			if(e->o->t==compiled) { editp=0; edit=e; draw(); }
-			return 1;
+			editp=0; edit=e;
 		}
+		draw();
+		return 1;
 	}
 
 	struct e *p=e;
