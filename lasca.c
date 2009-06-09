@@ -34,6 +34,7 @@ struct voc { struct e heads[256], *end; };
 static struct voc commands = {.end=commands.heads};
 static struct voc macros = {.end=macros.heads};
 static struct voc words = {.end=words.heads};
+static struct voc datas = {.end=datas.heads};
 
 static struct e *final=0;
 
@@ -73,10 +74,11 @@ static struct e *add(int x, int y, char *s, void *f, int len, int t) {
 	switch(t) {
 	case macro: h=macros.end++; break;
 	case command: h=commands.end++; break;
+	case data: h=datas.end++; break;
 	default: h=words.end++;
 	}
 	h->o=c;
-	h->n=t==compiled?final:0;
+	h->n=(t==compiled||t==data)?final:0;
 	return h;
 }
 
@@ -84,6 +86,7 @@ static struct e *editp=0;
 static struct e *edit=0;
 
 static void do_create() { editp=0; edit=add(100,100,"",0,0,compiled); draw(); }
+static void do_data() { editp=0; edit=add(100,100,"",0,0,data); draw(); }
 
 static void do_compile();
 static void do_ret(struct e *e);
@@ -105,7 +108,6 @@ static void compile_7(struct e *e);
 static void compile_8(struct e *e);
 static void compile_9(struct e *e);
 static void compile_d(struct e *e);
-static void compile_data(struct e *e);
 
 uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
 
@@ -149,7 +151,7 @@ void init(cairo_t *cr1) {
 	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
-	add(50,310,"data", compile_data,0,macro);
+	add(50,310,"data", do_data,0,command);
 
 	nospace=1;
 
@@ -247,6 +249,7 @@ void draw() {
 
 	struct e *e;
 	for(e=macros.heads;e<macros.end;e++) { padcolor=macrocolor; drawlist(e); }
+	for(e=datas.heads;e<datas.end;e++) { padcolor=datacolor; drawlist(e); }
 	for(e=words.heads;e<words.end;e++) { padcolor=normalcolor; drawlist(e); }
 	for(e=commands.heads;e<commands.end;e++) { padcolor=commandcolor; drawlist(e); }
 
@@ -275,25 +278,6 @@ void compile_9(struct e *e) { n=n*10+9; nend(e); }
 void compile_d(struct e *e) { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; }
 
 struct e *compilednow=0;
-
-void do_data() {
-	register uint32_t *stack asm("esi");
-	printf("alloc: %u %u\n",stack[0],stack[1]);
-	compilednow->o->data=realloc((void *)stack[0],stack[1]);
-	printf(" -> %u\n",(uint32_t)(compilednow->o->data));
-}
-
-void compile_data(struct e *e) {
-	compilednow->o->t=data;
-	compile_dup();
-	compile_imm((int32_t)compilednow->o->data);
-	compile_dup();
-	*cc.b++=0xe8;
-	*cc.i++=((uint8_t*)do_data)-(cc.b+4);
-	compile_drop();
-	compile_drop();
-	compile_drop();
-}
 
 static void do_ret(struct e *e) { *cc.b++=0xc3; }
 int8_t *fwjumps[8], **fwjump;
@@ -337,6 +321,17 @@ static void delay(struct tag *w) {
 	dec->p=cc.i++; dec->w=w; dec++;
 }
 
+inline void *compiledata(struct e *e) {
+	void *beginning=cc.b;
+	fwjump=fwjumps;
+	bwjump=bwjumps;
+	for(e=e->n;e;e=e->n) {
+		if(e->o->t == macro) { void (*f)(struct e *e) = e->o->data; f(e); }
+	}
+	cc.b=beginning;
+	return beginning;
+}
+
 inline void compilelist(struct e *e) {
 	compilednow=e;
 	void *beginning=cc.b;
@@ -365,12 +360,8 @@ static void do_compile() {
 	cc.b=ccode;
 	struct e *e;
 	dec=decs;
-	for(e=words.heads;e<words.end;e++) {
-		if(e->o->t==compiled||e->o->t==data) { compilelist(e); }
-	}
-	for(e=words.heads;e<words.end;e++) {
-		if(e->o->t==data) { compilednow=e; execute(e->o->data); }
-	}
+	for(e=words.heads;e<words.end;e++) { compilelist(e); }
+	for(e=datas.heads;e<datas.end;e++) { execute(compiledata(e)); e->o->data=realloc(e->o->data,*stack++); }
 	while(--dec>=decs) {
 		*dec->p=dec->w->t==data?((uint32_t)dec->w->data) : ((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
 	}
@@ -412,6 +403,7 @@ void button(int x1,int y1) {
 	struct e *e;
 	for(e=commands.heads;e<commands.end;e++) { if(clickcommand(e,x1,y1)) return; }
 	for(e=words.heads;e<words.end;e++) { if(clicklist(e,x1,y1)) return; }
+	for(e=datas.heads;e<datas.end;e++) { if(clicklist(e,x1,y1)) return; }
 	for(e=macros.heads;e<macros.end;e++) { if(clicklist(e,x1,y1)) return; }
 
 	if(edit&&!editp) { edit->o->x=x1 & 0xfffffff0; edit->o->y=y1 & 0xfffffff0; draw(); return;}
