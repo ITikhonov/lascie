@@ -26,14 +26,14 @@ enum nmflag { compiled, data, macro, command };
 struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; };
 
 static struct tag tags[256], *tags_e = tags;
-static struct tag *user=0;
 static struct e { struct e *n; struct tag *o; } editcode[1024];
 static struct e *editcode_e=editcode;
 
 struct voc { struct e heads[256], *end; };
 
-struct voc macros = {.end=macros.heads};
-struct voc words = {.end=words.heads};
+static struct voc commands = {.end=commands.heads};
+static struct voc macros = {.end=macros.heads};
+static struct voc words = {.end=words.heads};
 
 static struct e *final=0;
 
@@ -42,16 +42,6 @@ void draw();
 static void do_exit() { exit(0); }
 
 inline void savelist(struct e *e, FILE *f) {
-	if(e->o<user) return;
-	fwrite(&e->o->x,4,1,f);
-	fwrite(&e->o->y,4,1,f);
-	fwrite(&e->o->s,8,1,f);
-	fwrite(&e->o->t,1,1,f);
-
-	for(e=e->n;e;e=e->n) {
-		int16_t n=e->o-user;
-		fwrite(&n,2,1,f);
-	}
 }
 
 static void do_save() {
@@ -82,6 +72,7 @@ static struct e *add(int x, int y, char *s, void *f, int len, int t) {
 	struct e *h;
 	switch(t) {
 	case macro: h=macros.end++; break;
+	case command: h=commands.end++; break;
 	default: h=words.end++;
 	}
 	h->o=c;
@@ -263,6 +254,7 @@ void draw() {
 	struct e *e;
 	for(e=macros.heads;e<macros.end;e++) { drawlist(e); }
 	for(e=words.heads;e<words.end;e++) { drawlist(e); }
+	for(e=commands.heads;e<commands.end;e++) { drawlist(e); }
 
 	drawstack();
 }
@@ -390,6 +382,11 @@ static void do_compile() {
 	}
 }
 
+inline int clickcommand(struct e *e, int x1,int y1) {
+	if(!(e->o->y<=y1 && y1<=e->o->y+e->o->h && x1>e->o->x && x1<e->o->x+e->o->w)) return 0;
+	void (*f)(void)=(void *)e->o->data; f(); return 1;
+}
+
 
 inline int clicklist(struct e *e, int x1,int y1) {
 	if(!(e->o->y<=y1 && y1<=e->o->y+e->o->h && x1>e->o->x)) return 0;
@@ -403,10 +400,8 @@ inline int clicklist(struct e *e, int x1,int y1) {
 			editp=e1;
 			draw(); return 1;
 		} else {
-			switch(e->o->t) {
-			case command: { void (*f)(void)=(void *)e->o->data; f(); return 1; }
-			case compiled: editp=0; edit=e; draw(); return 1;
-			}
+			if(e->o->t==compiled) { editp=0; edit=e; draw(); }
+			return 1;
 		}
 	}
 
@@ -421,8 +416,9 @@ inline int clicklist(struct e *e, int x1,int y1) {
 
 void button(int x1,int y1) {
 	struct e *e;
-	for(e=macros.heads;e<macros.end;e++) { if(clicklist(e,x1,y1)) return; }
+	for(e=commands.heads;e<commands.end;e++) { if(clickcommand(e,x1,y1)) return; }
 	for(e=words.heads;e<words.end;e++) { if(clicklist(e,x1,y1)) return; }
+	for(e=macros.heads;e<macros.end;e++) { if(clicklist(e,x1,y1)) return; }
 
 	if(edit&&!editp) { edit->o->x=x1 & 0xfffffff0; edit->o->y=y1 & 0xfffffff0; draw(); return;}
 
