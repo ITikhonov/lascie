@@ -29,7 +29,13 @@ static struct word words[256], *words_e = words;
 static struct word *user=0;
 static struct e { struct e *n; struct word *o; } editcode[1024];
 static struct e *editcode_e=editcode;
+
+struct voc { struct e heads[256], *end; };
+
+struct voc macros = {.end=macros.heads};
+
 static struct e heads[256], *heads_e = heads;
+
 static struct e *userh=0;
 
 static struct e *final=0;
@@ -109,7 +115,11 @@ static struct e *add(int x, int y, char *s, void *f, int len, int t) {
 	strncpy(c->s,s,7);
 	resize(c);
 
-	struct e *h=heads_e++;
+	struct e *h;
+	switch(t) {
+	case macro: h=macros.end++; break;
+	default: h=heads_e++;
+	}
 	h->o=c;
 	h->n=t==compiled?final:0;
 	return h;
@@ -289,6 +299,7 @@ void draw() {
 	cairo_paint(cr);
 
 	struct e *e;
+	for(e=macros.heads;e<macros.end;e++) { drawlist(e); }
 	for(e=heads;e<heads_e;e++) { drawlist(e); }
 
 	drawstack();
@@ -419,6 +430,7 @@ static void do_compile() {
 
 
 inline int clicklist(struct e *e, int x1,int y1) {
+	if(!(e->o->y<=y1 && y1<=e->o->y+e->o->h && x1>e->o->x)) return 0;
 	x=e->o->x+e->o->w; y=e->o->y;
 	if(x1<=x) {
 		if(editp) {
@@ -447,9 +459,8 @@ inline int clicklist(struct e *e, int x1,int y1) {
 
 void button(int x1,int y1) {
 	struct e *e;
-	for(e=heads;e<heads_e;e++) {
-		if(e->o->y<=y1 && y1<=e->o->y+e->o->h && x1>e->o->x) { if(clicklist(e,x1,y1)) return; }
-	}
+	for(e=macros.heads;e<macros.end;e++) { if(clicklist(e,x1,y1)) return; }
+	for(e=heads;e<heads_e;e++) { if(clicklist(e,x1,y1)) return; }
 
 	if(edit&&!editp) { edit->o->x=x1 & 0xfffffff0; edit->o->y=y1 & 0xfffffff0; draw(); return;}
 
