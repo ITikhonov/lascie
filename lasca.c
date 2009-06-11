@@ -23,33 +23,32 @@ static int button_height=0;
 
 enum nmflag { compiled, data, macro, command };
 
-struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; };
+struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; struct e *def; };
 
-static struct tag tags[256], *tags_e = tags;
 static struct e { struct e *n; struct tag *o; } editcode[1024];
 static struct e *editcode_e=editcode;
 
-struct voc { struct e heads[256], *end; };
+struct voc { struct tag heads[256], *end; };
 
 static struct voc commands = {.end=commands.heads};
 static struct voc macros = {.end=macros.heads};
 static struct voc words = {.end=words.heads};
 static struct voc datas = {.end=datas.heads};
 
-static struct e *final=0;
+struct editor { struct tag *tag; struct e **pos; int x, y; } edit;
+
+static struct e final={0,0};
+
+struct tag *selected=0;
 
 void draw();
 
 static void do_exit() { exit(0); }
 
-inline void savelist(struct e *e, FILE *f) {
+inline void savelist(struct tag *e, FILE *f) {
 }
 
 static void do_save() {
-	struct e *e;
-	FILE *f=fopen("save","w");
-	for(e=words.heads;e<words.end;e++) { savelist(e,f); }
-	fclose(f);
 }
 
 static void resize(struct tag *c) {
@@ -64,29 +63,28 @@ static void do_load() {
 
 
 int nospace=0;
-static struct e *add(int x, int y, char *s, void *f, int len, int t) {
-	struct tag *c=tags_e++;
+static struct tag *add(int x, int y, char *s, void *f, int len, int t) {
+	struct tag *c;
+	switch(t) {
+	case macro: c=macros.end++; break;
+	case command: c=commands.end++; break;
+	case data: c=datas.end++; break;
+	default: c=words.end++;
+	}
+
 	c->x=x; c->y=y; c->t=t; c->data=f; c->l=len; c->nospace=nospace;
 	strncpy(c->s,s,7);
 	resize(c);
-
-	struct e *h;
-	switch(t) {
-	case macro: h=macros.end++; break;
-	case command: h=commands.end++; break;
-	case data: h=datas.end++; break;
-	default: h=words.end++;
-	}
-	h->o=c;
-	h->n=(t==compiled||t==data)?final:0;
-	return h;
+	c->def=(t==compiled||t==data)?&final:0;
+	return c;
 }
 
-static struct e *editp=0;
-static struct e *edit=0;
+static void openeditor(struct tag *t) {
+	edit.tag=t; edit.x=edit.tag->x; edit.y=edit.tag->y+button_height+5; edit.pos=&(edit.tag->def); draw();
+}
 
-static void do_create() { editp=0; edit=add(100,100,"",0,0,compiled); draw(); }
-static void do_data() { editp=0; edit=add(100,100,"",0,0,data); draw(); }
+static void do_create() { openeditor(add(100,100,"",0,0,compiled)); }
+static void do_data() { openeditor(add(100,100,"",0,0,data)); draw(); }
 
 static void do_compile();
 static void do_ret(struct e *e);
@@ -125,7 +123,8 @@ static void execute(void (*f)(void)) {
 }
 
 static void do_execute() {
-	if(edit && edit->o->data) { execute(edit->o->data); }
+	if(edit.tag && edit.tag->data) { execute(edit.tag->data); }
+	else if(selected && selected->data) { execute(selected->data); }
 	draw();
 }
 
@@ -136,8 +135,6 @@ static void compile_drop();
 static void compile_dec();
 static void compile_inc();
 
-static int8_t hexext;
-
 void init(cairo_t *cr1) {
 	cr=cr1;
 	cairo_select_font_face (cr, "times", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
@@ -147,12 +144,6 @@ void init(cairo_t *cr1) {
 	cairo_text_extents_t te;
 	cairo_text_extents(cr,"abcdefghijklmnopqrstuvwxyz0123456789;",&te);
 	button_height=te.height;
-	resize(tags);
-
-	int n;
-	char s[2]={0,0};
-	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
-	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
 	add(30,110,"data", do_data,0,command);
 
@@ -196,7 +187,7 @@ void init(cairo_t *cr1) {
 	add(30,70,"compile", do_compile,0,command);
 	add(30,50,"exit", do_exit,0,command);
 	add(30,30,"create", do_create,0,command);
-	final=add(30,130,";",do_ret,0,macro);
+	final.o=add(30,130,";",do_ret,0,macro);
 }
 
 float *padcolor;
@@ -207,6 +198,7 @@ float datacolor[]   ={0.9,0.9,0.5};
 
 inline void setpadcolor() { cairo_set_source_rgb(cr,padcolor[0],padcolor[1],padcolor[2]); }
 inline void dullcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.8); }
+inline void selectcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.0); }
 
 inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
 
@@ -239,10 +231,23 @@ void drawstack() {
 	cairo_stroke(cr);
 }
 
-inline void drawlist(struct e *e) {
-	x=e->o->x; y=e->o->y;
-	for(e=e;e;e=e->n) {
-		if(edit && edit!=e) dullcolor(); else setpadcolor();
+
+void drawtag(struct tag *t) {
+	if(t==selected) selectcolor(); else setpadcolor();
+	x=t->x; y=t->y;
+	label(t);
+}
+
+void draweditor(struct editor *ed) {
+	x=ed->x; y=ed->y;
+	dullcolor();
+	label(ed->tag);
+	x+=ed->tag->w;
+
+	struct e *e=ed->tag->def;
+	if(!e) return;
+	for(;e;e=e->n) {
+		if(e==*edit.pos) selectcolor(); else dullcolor();
 		label(e->o);
 		x+=e->o->w;
 	}
@@ -252,11 +257,13 @@ void draw() {
 	cairo_set_source_rgb(cr,255,255,255);
 	cairo_paint(cr);
 
-	struct e *e;
-	for(e=macros.heads;e<macros.end;e++) { padcolor=macrocolor; drawlist(e); }
-	for(e=datas.heads;e<datas.end;e++) { padcolor=datacolor; drawlist(e); }
-	for(e=words.heads;e<words.end;e++) { padcolor=normalcolor; drawlist(e); }
-	for(e=commands.heads;e<commands.end;e++) { padcolor=commandcolor; drawlist(e); }
+	struct tag *e;
+	for(e=macros.heads;e<macros.end;e++) { padcolor=macrocolor; drawtag(e); }
+	for(e=datas.heads;e<datas.end;e++) { padcolor=datacolor; drawtag(e); }
+	for(e=words.heads;e<words.end;e++) { padcolor=normalcolor; drawtag(e); }
+	for(e=commands.heads;e<commands.end;e++) { padcolor=commandcolor; drawtag(e); }
+
+	if(edit.tag) draweditor(&edit);
 
 	drawstack();
 }
@@ -339,23 +346,25 @@ static void delay(struct tag *w) {
 	dec->p=cc.i++; dec->w=w; dec++;
 }
 
-inline void *compiledata(struct e *e) {
+inline void *compiledata(struct tag *t) {
 	void *beginning=cc.b;
 	fwjump=fwjumps;
 	bwjump=bwjumps;
-	for(e=e->n;e;e=e->n) {
+	struct e *e=t->def;
+	for(;e;e=e->n) {
 		if(e->o->t == macro) { void (*f)(struct e *e) = e->o->data; f(e); }
 	}
 	cc.b=beginning;
 	return beginning;
 }
 
-inline void compilelist(struct e *e) {
-	compilednow=e;
-	void *beginning=cc.b;
+inline void compilelist(struct tag *t) {
+	t->data=cc.b;
 	fwjump=fwjumps;
 	bwjump=bwjumps;
-	for(e=e->n;e;e=e->n) {
+
+	struct e *e=t->def;
+	for(;e;e=e->n) {
 		switch(e->o->t) {
 		case macro: { void (*f)(struct e *e) = e->o->data; f(e); } break;
 		case data:
@@ -366,96 +375,99 @@ inline void compilelist(struct e *e) {
 		default:
 			if(e->o->t==command) { compile_dup(); }
 			*cc.b++=0xe8;
-			if(e->o->data == 0 || compilednow->o<e->o) delay(e->o);
+			if(e->o->data == 0 || t<e->o) delay(e->o);
 			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
 			if(e->o->t==command) { compile_drop(); }
 		}
 	}
-	compilednow->o->data=beginning;
 }
 
 static void do_compile() {
 	cc.b=ccode;
-	struct e *e;
+	struct tag *e;
 	dec=decs;
 	for(e=words.heads;e<words.end;e++) { compilelist(e); }
-	for(e=datas.heads;e<datas.end;e++) { execute(compiledata(e)); e->o->data=realloc(e->o->data,*stack++); }
+	for(e=datas.heads;e<datas.end;e++) { execute(compiledata(e)); e->data=realloc(e->data,*stack++); }
 	while(--dec>=decs) {
 		*dec->p=dec->w->t==data?((uint32_t)dec->w->data) : ((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
 	}
 }
 
-inline int clickcommand(struct e *e, int x1,int y1) {
-	if(!(e->o->y<=y1 && y1<=e->o->y+e->o->h && x1>e->o->x && x1<e->o->x+e->o->w)) return 0;
-	void (*f)(void)=(void *)e->o->data; f(); return 1;
+inline int clickcommand(struct tag *e, int x1,int y1) {
+	if(!(e->y<=y1 && y1<=e->y+e->h && x1>e->x && x1<e->x+e->w)) return 0;
+	void (*f)(void)=(void *)e->data; f(); return 1;
 }
 
 
-inline int clicklist(struct e *e, int x1,int y1) {
-	if(!(e->o->y<=y1 && y1<=e->o->y+e->o->h && x1>e->o->x)) return 0;
-	x=e->o->x+e->o->w; y=e->o->y;
-	if(x1<=x) {
-		if(editp) {
-			struct e *e1=editcode_e++;
-			e1->o=e->o;
-			e1->n=edit;
-			editp->n=e1;
-			editp=e1;
-		} else {
-			editp=0; edit=e;
-		}
-		draw();
-		return 1;
+inline int clicktag(struct tag *t, int x1,int y1) {
+	if(!(t->y<=y1 && y1<=t->y+t->h && x1>t->x && x1<t->x+t->w)) return 0;
+	if(edit.tag) {
+		struct e *e=editcode_e++;
+		e->o=t;
+		e->n=*edit.pos;
+		*edit.pos=e;
+		edit.pos=&e->n;
+	} else if((t->t==data || t->t==compiled) && t==selected) {
+		openeditor(t);
+	} else {
+		selected=t;
 	}
+	draw();
+	return 1;
+}
 
-	struct e *p=e;
-	for(e=e->n;e;e=e->n) {
-		x+=e->o->w;
-		if(x1<=x) { editp=p; edit=e; draw(); return 1; }
-		p=e;
+inline int clickeditor(struct editor *ed, int x1, int y1) {
+	if(!(ed->y<=y1 && y1<=ed->y+button_height+5 && x1>ed->x)) return 0;
+
+	x=ed->x+ed->tag->w; y=ed->y;
+	if(x1<=x) { edit.tag=0; draw(); return 1; }
+
+	struct e **p=&ed->tag->def;
+	for(;*p;p=&(*p)->n) {
+		x+=(*p)->o->w;
+		if(x1<=x) { ed->pos=p; draw(); return 1; }
 	}
 	return 0;
 }
 
-void button(int x1,int y1) {
-	struct e *e;
+void release(int x1,int y1) {
+	struct tag *e;
 	for(e=commands.heads;e<commands.end;e++) { if(clickcommand(e,x1,y1)) return; }
-	for(e=words.heads;e<words.end;e++) { if(clicklist(e,x1,y1)) return; }
-	for(e=datas.heads;e<datas.end;e++) { if(clicklist(e,x1,y1)) return; }
-	for(e=macros.heads;e<macros.end;e++) { if(clicklist(e,x1,y1)) return; }
 
-	if(edit&&!editp) { edit->o->x=x1 & 0xfffffff0; edit->o->y=y1 & 0xfffffff0; draw(); return;}
+	for(e=words.heads;e<words.end;e++) { if(clicktag(e,x1,y1)) return; }
+	for(e=datas.heads;e<datas.end;e++) { if(clicktag(e,x1,y1)) return; }
+	for(e=macros.heads;e<macros.end;e++) { if(clicktag(e,x1,y1)) return; }
 
-	editp=0; edit=0;
+	if(edit.tag) { if(!clickeditor(&edit,x1,y1)) {edit.x=x1 & 0xfffffff0; edit.y=y1 & 0xfffffff0; draw(); return;} }
+	else if(selected) { selected->x=x1 & 0xfffffff0; selected->y=y1 & 0xfffffff0; draw(); return; }
+
 	draw();
 }
 
+void button(int x1, int y1) {
+}
+
 void key(int k) {
-	if(edit) {
-		if(editp==0) {
-			struct e *e=edit;
-			switch(k) {
-				case XK_BackSpace:
-					e->o->s[strlen(e->o->s)-1]=0;
-					resize(e->o);
-					draw();
-					break;
-				case XK_Return:
-					editp=edit; edit=edit->n; draw(); break;
-				case '0'...'9':
-				case 'a'...'z': {
-					int l=strlen(e->o->s);
-					e->o->s[l]=k;
-					e->o->s[l+1]=0;
-					resize(e->o);
-					draw();
-					}
-			}
-		} else {
-			switch(k) {
-				case XK_Delete:
-					if(edit->n) { editp->n=edit->n; edit=edit->n; draw(); } break;
-			}
+	if(edit.tag) {
+		switch(k) {
+			case XK_BackSpace:
+				edit.tag->s[strlen(edit.tag->s)-1]=0;
+				resize(edit.tag);
+				draw();
+				break;
+			case XK_Delete:
+				if((*edit.pos)->n) { *(edit.pos)=(*edit.pos)->n; draw(); } break;
+			case XK_Return:
+				edit.tag=0; draw(); break;
+			case '0'...'9':
+			case 'a'...'z': {
+				char *s=edit.tag->s;
+				int l=strlen(s);
+				s[l]=k;
+				s[l+1]=0;
+				resize(edit.tag);
+				draw();
+				}
 		}
 	}
 }
