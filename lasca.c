@@ -108,6 +108,8 @@ static void compile_7(struct e *e);
 static void compile_8(struct e *e);
 static void compile_9(struct e *e);
 static void compile_d(struct e *e);
+static void compile_fetch();
+static void compile_store();
 
 uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
 
@@ -132,6 +134,7 @@ static void do_ping(void) { puts("PONG"); }
 static void compile_dup();
 static void compile_drop();
 static void compile_dec();
+static void compile_inc();
 
 static int8_t hexext;
 
@@ -151,7 +154,7 @@ void init(cairo_t *cr1) {
 	for(n='0';n<='9';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 	for(n='a';n<='f';n++) { s[0]=n; cairo_text_extents(cr,s,&te); if(hexext<te.x_advance) hexext=te.x_advance; }
 
-	add(50,310,"data", do_data,0,command);
+	add(30,110,"data", do_data,0,command);
 
 	nospace=1;
 
@@ -172,6 +175,8 @@ void init(cairo_t *cr1) {
 	add(350,330,"9", compile_9,0,macro);
 	nospace=0;
 
+	add(60,310,"@", compile_fetch,0,macro);
+	add(90,310,"!", compile_store,0,macro);
 
 	add(220,310,"!?", compile_notif,0,macro);
 	add(30,290,"ping", do_ping,0,command);
@@ -180,13 +185,13 @@ void init(cairo_t *cr1) {
 	add(60,330,"dup", compile_dup,0,macro);
 	add(90,330,"drop", compile_drop,0,macro);
 	add(130,330,"1-", compile_dec,0,macro);
+	add(130,310,"1+", compile_inc,0,macro);
 	add(160,330,"{", compile_begin,0,macro);
 	add(190,330,"<<", compile_rewind,0,macro);
 
 	add(30,250,"load", do_load,0,command);
 	add(30,270,"save", do_save,0,command);
 
-	add(30,110,"ph", do_ping,0,command);
 	add(30,90,"execute", do_execute,0,command);
 	add(30,70,"compile", do_compile,0,command);
 	add(30,50,"exit", do_exit,0,command);
@@ -313,9 +318,22 @@ static void compile_drop() {
 	*cc.b++=0xad;
 }
 
-static void compile_dec() {
-	*cc.b++=0x48;
+static void compile_fetch() {
+	*cc.b++=0x8b;
+	*cc.b++=0x00;
 }
+
+static void compile_store() {
+	*cc.b++=0x89;
+	*cc.b++=0xc2;
+	compile_drop();
+	*cc.b++=0x89;
+	*cc.b++=0x02;
+	compile_drop();
+}
+
+static void compile_dec() { *cc.b++=0x48; }
+static void compile_inc() { *cc.b++=0x40; }
 
 static void delay(struct tag *w) {
 	dec->p=cc.i++; dec->w=w; dec++;

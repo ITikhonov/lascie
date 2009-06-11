@@ -3,5 +3,5 @@ LDFLAGS=-lcairo -lpthread -lasound
 
 all: lasca
 
-lasca: lasca.o main.o i386.o
+lasca: lasca.o main.o
 
