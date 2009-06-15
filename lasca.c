@@ -45,10 +45,35 @@ void draw();
 
 static void do_exit() { exit(0); }
 
-inline void savelist(struct tag *e, FILE *f) {
+inline void saveword(struct tag *t, FILE *f) {
+	fwrite(&t->t,1,1,f);
+	fwrite(t->s,8,1,f);
+	fwrite(&t->x,4,1,f);
+	fwrite(&t->y,4,1,f);
+
+	struct e *e=t->def;
+	for(;e;e=e->n) {
+		fwrite(&e->o->t,1,1,f);
+		struct voc *v;
+		switch(e->o->t) {
+			case macro: v=&macros; break;
+			case command: v=&commands; break;
+			case data: v=&datas; break;
+			case compiled: v=&words; break;
+		}
+		uint16_t n = e->o - v->heads;
+		fwrite(&n,2,1,f);
+	}
+	fwrite("\xff",1,1,f);
 }
 
 static void do_save() {
+	struct tag *t;
+	FILE *f=fopen("save","w");
+	for(t=datas.heads;t<datas.end;t++) { saveword(t,f); }
+	for(t=words.heads;t<words.end;t++) { saveword(t,f); }
+	fwrite("\xff",1,1,f);
+	fclose(f);
 }
 
 static void resize(struct tag *c) {
@@ -59,6 +84,56 @@ static void resize(struct tag *c) {
 
 
 static void do_load() {
+	FILE *f=fopen("save","r");
+
+	datas.end=datas.heads;
+	words.end=words.heads;
+
+	for(;;) {
+		uint8_t tp;
+		struct tag *t;
+		fread(&tp,1,1,f);
+		if(tp==0xff) break;
+
+		switch(tp) {
+			case compiled: t=words.end++; break;
+			case data: t=datas.end++; break;
+			default: abort();
+		}
+
+		t->t=tp;
+		fread(t->s,8,1,f);
+		fread(&t->x,4,1,f);
+		fread(&t->y,4,1,f);
+		resize(t);
+
+		struct e **p=&t->def;
+
+		for(;;) {
+			uint8_t tp;
+			fread(&tp,1,1,f);
+			if(tp==0xff) break;
+
+			struct voc *v;
+			switch(tp) {
+				case macro: v=&macros; break;
+				case command: v=&commands; break;
+				case data: v=&datas; break;
+				case compiled: v=&words; break;
+			}
+
+			uint16_t n;
+			fread(&n,2,1,f);
+
+			struct e *e=editcode_e++;
+			e->o=v->heads+n;
+			e->n=0;
+			*p=e;
+			p=&(e->n);
+		}
+	}
+	fclose(f);
+	draw();
 }
 
 
