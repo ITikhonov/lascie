@@ -117,9 +117,9 @@ win_handle_events(win_t *win)
 	case ConfigureNotify:
 	{
 	    XConfigureEvent *cev = &xev.xconfigure;
-
-	    win->width = cev->width;
-	    win->height = cev->height;
+		win->width = cev->width;
+		win->height = cev->height;
+		cairo_xlib_surface_set_size(surface,cev->width,cev->height);
 	}
 	break;
 	case ButtonPress:
