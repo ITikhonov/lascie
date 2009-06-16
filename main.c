@@ -27,6 +27,7 @@ extern void draw();
 extern void button(int,int);
 extern void release(int,int);
 extern void key(int);
+extern void go();
 
 static cairo_t *cr=0;
 static cairo_surface_t *surface;
@@ -105,6 +106,7 @@ win_handle_events(win_t *win)
     XEvent xev;
 
     while (1) {
+	while(XPending(win->dpy)==0) { go(); }
 	XNextEvent(win->dpy, &xev);
 	switch(xev.type) {
 	case KeyPress:

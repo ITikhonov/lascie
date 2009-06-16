@@ -165,6 +165,7 @@ static void do_compile();
 static void do_ret(struct e *e);
 static void do_if(struct e *e);
 static void compile_notif(struct e *e);
+static void compile_ifns(struct e *e);
 static void do_end(struct e *e);
 static void compile_begin(struct e *e);
 static void compile_rewind(struct e *e);
@@ -211,8 +212,10 @@ static void compile_dec();
 static void compile_inc();
 static void compile_nip();
 static void compile_add();
+static void compile_sub();
 static void compile_over();
 static void compile_swap();
+static void compile_spot();
 
 void init(cairo_t *cr1) {
 	cr=cr1;
@@ -271,6 +274,11 @@ void init(cairo_t *cr1) {
 	add(90,290,"+", compile_add,0,macro);
 	add(120,290,"over", compile_over,0,macro);
 	add(150,290,"swap", compile_swap,0,macro);
+
+	add(80,30,"go",0,0,compiled);
+	add(80,50,"spot",compile_spot,0,macro);
+	add(240,320,"?+", compile_ifns,0,macro);
+	add(90,270,"-", compile_sub,0,macro);
 }
 
 float *padcolor;
@@ -380,10 +388,9 @@ static void do_if(struct e *e) {
 	*cc.b++=0x75;
 	*fwjump++=cc.c++;
 }
-static void compile_notif(struct e *e) {
-	*cc.b++=0x74;
-	*fwjump++=cc.c++;
-}
+static void compile_notif(struct e *e) { *cc.b++=0x74; *fwjump++=cc.c++; }
+static void compile_ifns(struct e *e) { *cc.b++=0x79; *fwjump++=cc.c++; }
+
 static void do_end(struct e *e) {
 	--fwjump;
 	**fwjump = cc.b - (uint8_t*)((*fwjump)+1);
@@ -426,8 +433,26 @@ static void compile_dec() { *cc.b++=0x48; }
 static void compile_inc() { *cc.b++=0x40; }
 static void compile_nip() { *cc.b++=0x8d; *cc.b++=0x76; *cc.b++=0x04; }
 static void compile_add() { *cc.b++=0x03; *cc.b++=0x06; compile_nip(); }
+static void compile_sub() { *cc.b++=0x2b; *cc.b++=0x06; compile_nip(); }
 static void compile_over() { compile_dup(); *cc.b++=0x8b; *cc.b++=0x46; *cc.b++=0x04; }
 static void compile_swap() { *cc.b++=0x87; *cc.b++=0x06; }
+
+void compile_call(void *a) { *cc.b++=0xe8; *cc.i++=((uint8_t*)a)-(cc.b+4); }
+
+static void do_spot() {
+	register uint32_t *stack asm("esi");
+	uint32_t *s = (void *)(stack[0]);
+	cairo_set_source_rgb(cr,0.8,0.8,0.8);
+	cairo_arc(cr,s[0],s[1],2,0,7);
+	cairo_fill(cr);
+}
+
+static void compile_spot() {
+	compile_dup();
+	compile_call(do_spot);
+	compile_drop();
+	compile_drop();
+}
 
 static void delay(struct tag *w) {
 	dec->p=cc.i++; dec->w=w; dec++;
@@ -444,6 +469,7 @@ inline void *compiledata(struct tag *t) {
 	cc.b=beginning;
 	return beginning;
 }
+
 
 inline void compilelist(struct tag *t) {
 	t->data=cc.b;
@@ -519,14 +545,17 @@ inline int clickeditor(struct editor *ed, int x1, int y1) {
 
 void release(int x1,int y1) {
 	struct tag *e;
+
+	if(edit.tag) { if(clickeditor(&edit,x1,y1)) return; }
+
 	for(e=commands.heads;e<commands.end;e++) { if(clickcommand(e,x1,y1)) return; }
 
 	for(e=words.heads;e<words.end;e++) { if(clicktag(e,x1,y1)) return; }
 	for(e=datas.heads;e<datas.end;e++) { if(clicktag(e,x1,y1)) return; }
 	for(e=macros.heads;e<macros.end;e++) { if(clicktag(e,x1,y1)) return; }
 
-	if(edit.tag) { if(!clickeditor(&edit,x1,y1)) {edit.x=x1 & 0xfffffff0; edit.y=y1 & 0xfffffff0; draw(); return;} }
-	else if(selected) { selected->x=x1 & 0xfffffff0; selected->y=y1 & 0xfffffff0; draw(); return; }
+	if(edit.tag) { edit.x=x1 & 0xfffffff0; edit.y=y1 & 0xfffffff0; draw(); return; }
+	if(selected) { selected->x=x1 & 0xfffffff0; selected->y=y1 & 0xfffffff0; draw(); return; }
 
 	draw();
 }
@@ -557,5 +586,9 @@ void key(int k) {
 				}
 		}
 	}
+}
+
+void go() {
+	if(words.heads->data) { execute(words.heads->data); }
 }
 
