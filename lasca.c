@@ -209,6 +209,10 @@ static void compile_dup();
 static void compile_drop();
 static void compile_dec();
 static void compile_inc();
+static void compile_nip();
+static void compile_add();
+static void compile_over();
+static void compile_swap();
 
 void init(cairo_t *cr1) {
 	cr=cr1;
@@ -263,6 +267,10 @@ void init(cairo_t *cr1) {
 	add(30,50,"exit", do_exit,0,command);
 	add(30,30,"create", do_create,0,command);
 	final.o=add(30,130,";",do_ret,0,macro);
+	add(60,290,"nip", compile_nip,0,macro);
+	add(90,290,"+", compile_add,0,macro);
+	add(120,290,"over", compile_over,0,macro);
+	add(150,290,"swap", compile_swap,0,macro);
 }
 
 float *padcolor;
@@ -416,6 +424,10 @@ static void compile_store() {
 
 static void compile_dec() { *cc.b++=0x48; }
 static void compile_inc() { *cc.b++=0x40; }
+static void compile_nip() { *cc.b++=0x8d; *cc.b++=0x76; *cc.b++=0x04; }
+static void compile_add() { *cc.b++=0x03; *cc.b++=0x06; compile_nip(); }
+static void compile_over() { compile_dup(); *cc.b++=0x8b; *cc.b++=0x46; *cc.b++=0x04; }
+static void compile_swap() { *cc.b++=0x87; *cc.b++=0x06; }
 
 static void delay(struct tag *w) {
 	dec->p=cc.i++; dec->w=w; dec++;
