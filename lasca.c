@@ -181,7 +181,14 @@ static void compile_6(struct e *e);
 static void compile_7(struct e *e);
 static void compile_8(struct e *e);
 static void compile_9(struct e *e);
+static void compile_a(struct e *e);
+static void compile_b(struct e *e);
+static void compile_c(struct e *e);
 static void compile_d(struct e *e);
+static void compile_e(struct e *e);
+static void compile_f(struct e *e);
+static void compile_n(struct e *e);
+static void compile_h(struct e *e);
 static void compile_fetch();
 static void compile_store();
 
@@ -216,6 +223,7 @@ static void compile_sub();
 static void compile_over();
 static void compile_swap();
 static void compile_spot();
+static void compile_h();
 
 void init(cairo_t *cr1) {
 	cr=cr1;
@@ -231,6 +239,7 @@ void init(cairo_t *cr1) {
 
 	nospace=1;
 
+	add(285,310,"h", compile_h,0,macro);
 	add(300,310,"d", compile_d,0,macro);
 	add(300,290,"0", compile_0,0,macro);
 	add(300,330,"-", compile_neg,0,macro);
@@ -246,6 +255,14 @@ void init(cairo_t *cr1) {
 	add(320,330,"7", compile_7,0,macro);
 	add(335,330,"8", compile_8,0,macro);
 	add(350,330,"9", compile_9,0,macro);
+
+	add(365,290,"a", compile_a,0,macro);
+	add(365,310,"b", compile_b,0,macro);
+	add(365,330,"c", compile_c,0,macro);
+
+	add(380,290,"d", compile_d,0,macro);
+	add(380,310,"e", compile_e,0,macro);
+	add(380,330,"f", compile_f,0,macro);
 	nospace=0;
 
 	add(60,310,"@", compile_fetch,0,macro);
@@ -365,20 +382,43 @@ static struct { int32_t *p; struct tag *w; } decs[1024], *dec=decs;
 
 static void compile_imm(int32_t x) { *cc.b++=0xb8; *cc.i++=x; }
 
-int n=0, n_sign=1;
-void nend(struct e *e) { if(!e->n->o->nospace) compile_d(e); }
+
+int n=0, n_sign=1, base=10;
+void nend(struct e *e) { if(!e->n->o->nospace) { compile_n(e); } }
 void compile_neg(struct e *e) { n_sign=-1; nend(e); }
-void compile_0(struct e *e) { n=n*10; nend(e);}
-void compile_1(struct e *e) { n=n*10+1; nend(e); }
-void compile_2(struct e *e) { n=n*10+2; nend(e); }
-void compile_3(struct e *e) { n=n*10+3; nend(e); }
-void compile_4(struct e *e) { n=n*10+4; nend(e); }
-void compile_5(struct e *e) { n=n*10+5; nend(e); }
-void compile_6(struct e *e) { n=n*10+6; nend(e); }
-void compile_7(struct e *e) { n=n*10+7; nend(e); }
-void compile_8(struct e *e) { n=n*10+8; nend(e); }
-void compile_9(struct e *e) { n=n*10+9; nend(e); }
-void compile_d(struct e *e) { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; }
+void compile_0(struct e *e) { n=n*base; nend(e);}
+void compile_1(struct e *e) { n=n*base+1; nend(e); }
+void compile_2(struct e *e) { n=n*base+2; nend(e); }
+void compile_3(struct e *e) { n=n*base+3; nend(e); }
+void compile_4(struct e *e) { n=n*base+4; nend(e); }
+void compile_5(struct e *e) { n=n*base+5; nend(e); }
+void compile_6(struct e *e) { n=n*base+6; nend(e); }
+void compile_7(struct e *e) { n=n*base+7; nend(e); }
+void compile_8(struct e *e) { n=n*base+8; nend(e); }
+void compile_9(struct e *e) { n=n*base+9; nend(e); }
+void compile_n(struct e *e) { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; base=10; }
+
+static void convert_h() {
+	if(base==16) return;
+	int x=n%10; n/=10;
+	x+=(n%10)*0x10; n/=10;
+	x+=(n%10)*0x100; n/=10;
+	x+=(n%10)*0x1000; n/=10;
+	x+=(n%10)*0x10000; n/=10;
+	x+=(n%10)*0x100000; n/=10;
+	x+=(n%10)*0x1000000; n/=10;
+	x+=(n%10)*0x10000000; n/=10;
+	n=x;
+	base=16;
+}
+
+void compile_a(struct e *e) { convert_h(); n=n*16+10; nend(e); }
+void compile_b(struct e *e) { convert_h(); n=n*16+11; nend(e); }
+void compile_c(struct e *e) { convert_h(); n=n*16+12; nend(e); }
+void compile_d(struct e *e) { convert_h(); n=n*16+13; nend(e); }
+void compile_e(struct e *e) { convert_h(); n=n*16+14; nend(e); }
+void compile_f(struct e *e) { convert_h(); n=n*16+15; nend(e); }
+void compile_h(struct e *e) { convert_h(); compile_n(e); }
 
 struct e *compilednow=0;
 
