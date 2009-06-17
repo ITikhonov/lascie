@@ -23,7 +23,7 @@ static int button_height=0;
 
 enum nmflag { compiled, data, macro, command };
 
-struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; struct e *def; };
+struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; struct e *def; uint8_t gen; };
 
 static struct e { struct e *n; enum nmflag t; struct tag *o; } editcode[1024];
 static struct e *editcode_e=editcode;
@@ -147,7 +147,7 @@ static struct tag *add(int x, int y, char *s, void *f, int len, int t) {
 	default: c=words.end++;
 	}
 
-	c->x=x; c->y=y; c->t=t; c->data=f; c->l=len; c->nospace=nospace;
+	c->x=x; c->y=y; c->t=t; c->data=f; c->l=len; c->nospace=nospace; c->gen=0;
 	strncpy(c->s,s,7);
 	resize(c);
 	c->def=(t==compiled||t==data)?&final:0;
@@ -166,6 +166,7 @@ static void do_data() {
 }
 
 static void do_compile();
+static void do_plan();
 static void do_ret();
 static void do_if();
 static void compile_notif();
@@ -306,6 +307,7 @@ void init(cairo_t *cr1) {
 
 	add(30,150,"macro",do_macro,0,command);
 	add(30,170,"normal",do_normal,0,command);
+	add(30,190,"plan",do_plan,0,command);
 }
 
 void normalcolor() {cairo_set_source_rgb(cr,0.5,0.9,0.5);}
@@ -546,6 +548,42 @@ inline void compilelist(struct tag *t) {
 			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
 			if(e->o->t==command) { compile_drop(); }
 		}
+	}
+}
+
+uint8_t gen=0;
+
+static void do_plan() {
+	struct tag *t;
+	struct e *depth[10],**d;
+	gen+=2;
+	for(t=words.heads;t<words.end;t++) {
+		if(t->gen==gen) continue;
+		d=depth;
+		struct e *e=t->def;
+		printf("root: %s\n", t->s);
+		t->gen++;
+		int macronest=0;
+		for(;;) {
+			for(;e;e=e->n) {
+				if(e->o->t==macro) continue;
+				if(e->o->gen==t->gen+1) continue;
+				if(e->t!=macro) continue;
+				if(e->o->gen==t->gen) { printf("circular %s\n", e->o->s); return; }
+				break;
+			}
+			if(!e) {
+				if(--d<depth) break;
+				printf(" < %*s%s\n", (d-depth)*3, "", (*d)->o->s);
+				(*d)->o->gen++;
+				e=(*d)->n;
+			} else {
+				e->o->gen++;
+				*d++=e;
+				e=e->o->def;
+			}
+		}
+		t->gen++;
 	}
 }
 
