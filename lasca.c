@@ -25,7 +25,7 @@ enum nmflag { compiled, data, macro, command };
 
 struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; struct e *def; };
 
-static struct e { struct e *n; struct tag *o; } editcode[1024];
+static struct e { struct e *n; enum nmflag t; struct tag *o; } editcode[1024];
 static struct e *editcode_e=editcode;
 
 struct voc { struct tag heads[256], *end; };
@@ -37,7 +37,7 @@ static struct voc datas = {.end=datas.heads};
 
 struct editor { struct tag *tag; struct e **pos; int x, y; } edit;
 
-static struct e final={0,0};
+static struct e final={.n=0,.t=macro};
 
 struct tag *selected=0;
 
@@ -159,36 +159,40 @@ static void openeditor(struct tag *t) {
 }
 
 static void do_create() { openeditor(add(100,100,"",0,0,compiled)); }
-static void do_data() { openeditor(add(100,100,"",0,0,data)); draw(); }
+static void do_data() {
+	if(edit.tag) { (*edit.pos)->t=data; }
+	else { openeditor(add(100,100,"",0,0,data)); }
+	draw();
+}
 
 static void do_compile();
-static void do_ret(struct e *e);
-static void do_if(struct e *e);
-static void compile_notif(struct e *e);
-static void compile_ifns(struct e *e);
-static void do_end(struct e *e);
-static void compile_begin(struct e *e);
-static void compile_rewind(struct e *e);
+static void do_ret();
+static void do_if();
+static void compile_notif();
+static void compile_ifns();
+static void do_end();
+static void compile_begin();
+static void compile_rewind();
 
-void compile_neg(struct e *e);
-static void compile_0(struct e *e);
-static void compile_1(struct e *e);
-static void compile_2(struct e *e);
-static void compile_3(struct e *e);
-static void compile_4(struct e *e);
-static void compile_5(struct e *e);
-static void compile_6(struct e *e);
-static void compile_7(struct e *e);
-static void compile_8(struct e *e);
-static void compile_9(struct e *e);
-static void compile_a(struct e *e);
-static void compile_b(struct e *e);
-static void compile_c(struct e *e);
-static void compile_d(struct e *e);
-static void compile_e(struct e *e);
-static void compile_f(struct e *e);
-static void compile_n(struct e *e);
-static void compile_h(struct e *e);
+void compile_neg();
+static void compile_0();
+static void compile_1();
+static void compile_2();
+static void compile_3();
+static void compile_4();
+static void compile_5();
+static void compile_6();
+static void compile_7();
+static void compile_8();
+static void compile_9();
+static void compile_a();
+static void compile_b();
+static void compile_c();
+static void compile_d();
+static void compile_e();
+static void compile_f();
+static void compile_n();
+static void compile_h();
 static void compile_fetch();
 static void compile_store();
 
@@ -210,6 +214,9 @@ static void do_execute() {
 	else if(selected && selected->data) { execute(selected->data); }
 	draw();
 }
+
+static void do_macro() { if(edit.tag) (*edit.pos)->t=macro; draw(); }
+static void do_normal() { if(edit.tag) (*edit.pos)->t=compiled; draw(); }
 
 
 static void do_ping(void) { puts("PONG"); }
@@ -240,7 +247,7 @@ void init(cairo_t *cr1) {
 	nospace=1;
 
 	add(285,310,"h", compile_h,0,macro);
-	add(300,310,"d", compile_d,0,macro);
+	add(300,310,"d", compile_n,0,macro);
 	add(300,290,"0", compile_0,0,macro);
 	add(300,330,"-", compile_neg,0,macro);
 
@@ -296,33 +303,32 @@ void init(cairo_t *cr1) {
 	add(80,50,"spot",compile_spot,0,macro);
 	add(240,320,"?+", compile_ifns,0,macro);
 	add(90,270,"-", compile_sub,0,macro);
+
+	add(30,150,"macro",do_macro,0,command);
+	add(30,170,"normal",do_normal,0,command);
 }
 
-float *padcolor;
-float normalcolor[] ={0.5,0.9,0.5};
-float macrocolor[]  ={0.9,0.5,0.9};
-float commandcolor[]={0.9,0.5,0.5};
-float datacolor[]   ={0.9,0.9,0.5};
+void normalcolor() {cairo_set_source_rgb(cr,0.5,0.9,0.5);}
+void macrocolor()  {cairo_set_source_rgb(cr,0.9,0.5,0.9);}
+void commandcolor(){cairo_set_source_rgb(cr,0.9,0.5,0.5);}
+void datacolor()   {cairo_set_source_rgb(cr,0.9,0.9,0.5);}
 
-inline void setpadcolor() { cairo_set_source_rgb(cr,padcolor[0],padcolor[1],padcolor[2]); }
 inline void dullcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.8); }
 inline void selectcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.0); }
 
 inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
 
-
 static int x,y;
 
-inline void label(struct tag *o) {
+inline void pad(struct tag *o) {
 	cairo_rectangle(cr,x,y,o->w,o->h);
 	cairo_fill(cr);
+}
 
-	textcolor();
-	
+inline void text(struct tag *o) {
 	cairo_move_to(cr, x+(o->nospace?0:5), y+button_height);
 	cairo_show_text(cr, o->s);
 	cairo_stroke(cr);
-
 }
 
 void drawstack() {
@@ -341,22 +347,31 @@ void drawstack() {
 
 
 void drawtag(struct tag *t) {
-	if(t==selected) selectcolor(); else setpadcolor();
 	x=t->x; y=t->y;
-	label(t);
+	if(t==selected) selectcolor();
+	pad(t);
+	textcolor(); text(t);
 }
 
 void draweditor(struct editor *ed) {
 	x=ed->x; y=ed->y;
-	dullcolor();
-	label(ed->tag);
+	dullcolor(); pad(ed->tag);
+	textcolor(); text(ed->tag);
 	x+=ed->tag->w;
 
 	struct e *e=ed->tag->def;
 	if(!e) return;
 	for(;e;e=e->n) {
-		if(e==*edit.pos) selectcolor(); else dullcolor();
-		label(e->o);
+		if(e==*edit.pos) y-=button_height/4;
+		switch(e->t) {
+			case macro: macrocolor(); break;
+			case command: commandcolor(); break;
+			case data: datacolor(); break;
+			case compiled: normalcolor(); break;
+		}
+		pad(e->o);
+		textcolor(); text(e->o);
+		if(e==*edit.pos) y+=button_height/4;
 		x+=e->o->w;
 	}
 }
@@ -366,10 +381,10 @@ void draw() {
 	cairo_paint(cr);
 
 	struct tag *e;
-	for(e=macros.heads;e<macros.end;e++) { padcolor=macrocolor; drawtag(e); }
-	for(e=datas.heads;e<datas.end;e++) { padcolor=datacolor; drawtag(e); }
-	for(e=words.heads;e<words.end;e++) { padcolor=normalcolor; drawtag(e); }
-	for(e=commands.heads;e<commands.end;e++) { padcolor=commandcolor; drawtag(e); }
+	for(e=macros.heads;e<macros.end;e++) { macrocolor(); drawtag(e); }
+	for(e=datas.heads;e<datas.end;e++) { datacolor(); drawtag(e); }
+	for(e=words.heads;e<words.end;e++) { normalcolor(); drawtag(e); }
+	for(e=commands.heads;e<commands.end;e++) { commandcolor(); drawtag(e); }
 
 	if(edit.tag) draweditor(&edit);
 
@@ -384,19 +399,18 @@ static void compile_imm(int32_t x) { *cc.b++=0xb8; *cc.i++=x; }
 
 
 int n=0, n_sign=1, base=10;
-void nend(struct e *e) { if(!e->n->o->nospace) { compile_n(e); } }
-void compile_neg(struct e *e) { n_sign=-1; nend(e); }
-void compile_0(struct e *e) { n=n*base; nend(e);}
-void compile_1(struct e *e) { n=n*base+1; nend(e); }
-void compile_2(struct e *e) { n=n*base+2; nend(e); }
-void compile_3(struct e *e) { n=n*base+3; nend(e); }
-void compile_4(struct e *e) { n=n*base+4; nend(e); }
-void compile_5(struct e *e) { n=n*base+5; nend(e); }
-void compile_6(struct e *e) { n=n*base+6; nend(e); }
-void compile_7(struct e *e) { n=n*base+7; nend(e); }
-void compile_8(struct e *e) { n=n*base+8; nend(e); }
-void compile_9(struct e *e) { n=n*base+9; nend(e); }
-void compile_n(struct e *e) { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; base=10; }
+void compile_neg() { n_sign=-1; }
+void compile_0() { n=n*base; }
+void compile_1() { n=n*base+1; }
+void compile_2() { n=n*base+2; }
+void compile_3() { n=n*base+3; }
+void compile_4() { n=n*base+4; }
+void compile_5() { n=n*base+5; }
+void compile_6() { n=n*base+6; }
+void compile_7() { n=n*base+7; }
+void compile_8() { n=n*base+8; }
+void compile_9() { n=n*base+9; }
+void compile_n() { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; base=10; }
 
 static void convert_h() {
 	if(base==16) return;
@@ -412,35 +426,35 @@ static void convert_h() {
 	base=16;
 }
 
-void compile_a(struct e *e) { convert_h(); n=n*16+10; nend(e); }
-void compile_b(struct e *e) { convert_h(); n=n*16+11; nend(e); }
-void compile_c(struct e *e) { convert_h(); n=n*16+12; nend(e); }
-void compile_d(struct e *e) { convert_h(); n=n*16+13; nend(e); }
-void compile_e(struct e *e) { convert_h(); n=n*16+14; nend(e); }
-void compile_f(struct e *e) { convert_h(); n=n*16+15; nend(e); }
-void compile_h(struct e *e) { convert_h(); compile_n(e); }
+void compile_a() { convert_h(); n=n*16+10; }
+void compile_b() { convert_h(); n=n*16+11; }
+void compile_c() { convert_h(); n=n*16+12; }
+void compile_d() { convert_h(); n=n*16+13; }
+void compile_e() { convert_h(); n=n*16+14; }
+void compile_f() { convert_h(); n=n*16+15; }
+void compile_h() { convert_h(); compile_n(); }
 
 struct e *compilednow=0;
 
-static void do_ret(struct e *e) { *cc.b++=0xc3; }
+static void do_ret() { *cc.b++=0xc3; }
 int8_t *fwjumps[8], **fwjump;
-static void do_if(struct e *e) {
+static void do_if() {
 	*cc.b++=0x75;
 	*fwjump++=cc.c++;
 }
-static void compile_notif(struct e *e) { *cc.b++=0x74; *fwjump++=cc.c++; }
-static void compile_ifns(struct e *e) { *cc.b++=0x79; *fwjump++=cc.c++; }
+static void compile_notif() { *cc.b++=0x74; *fwjump++=cc.c++; }
+static void compile_ifns() { *cc.b++=0x79; *fwjump++=cc.c++; }
 
-static void do_end(struct e *e) {
+static void do_end() {
 	--fwjump;
 	**fwjump = cc.b - (uint8_t*)((*fwjump)+1);
 }
 
 int8_t *bwjumps[8], **bwjump;
-static void compile_begin(struct e *e) {
+static void compile_begin() {
 	*bwjump++=cc.c;
 }
-static void compile_rewind(struct e *e) {
+static void compile_rewind() {
 	--bwjump;
 	*cc.b++=0xeb;
 	*cc.c++=*bwjump-(cc.c+1);
@@ -518,8 +532,8 @@ inline void compilelist(struct tag *t) {
 
 	struct e *e=t->def;
 	for(;e;e=e->n) {
-		switch(e->o->t) {
-		case macro: { void (*f)(struct e *e) = e->o->data; f(e); } break;
+		switch(e->t) {
+		case macro: { execute(e->o->data); } break;
 		case data:
 			compile_dup();
 			*cc.b++=0xb8;
@@ -557,6 +571,7 @@ inline int clicktag(struct tag *t, int x1,int y1) {
 	if(edit.tag) {
 		struct e *e=editcode_e++;
 		e->o=t;
+		e->t=t->t;
 		e->n=*edit.pos;
 		*edit.pos=e;
 		edit.pos=&e->n;
