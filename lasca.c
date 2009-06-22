@@ -532,9 +532,13 @@ inline void *compiledata(struct tag *t) {
 
 
 inline void compilelist(struct tag *t) {
+	printf("compile %s\n", t->s);
 	t->data=cc.b;
 	fwjump=fwjumps;
 	bwjump=bwjumps;
+
+	gen++;
+	t->gen++;
 
 	struct e *e=t->def;
 	for(;e;e=e->n) {
@@ -546,19 +550,19 @@ inline void compilelist(struct tag *t) {
 			delay(e->o);
 			break;
 		default:
-			if(e->o->t==command) { compile_dup(); }
 			*cc.b++=0xe8;
-			if(e->o->data == 0 || t<e->o) delay(e->o);
+			if(t->gen!= gen) delay(e->o);
 			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
-			if(e->o->t==command) { compile_drop(); }
 		}
 	}
 }
 
+struct tag *plan[256];
 
 static void do_plan() {
 	struct tag *t;
 	struct e *depth[10],**d;
+	struct tag **p=plan;
 	gen+=2;
 	for(t=words.heads;t<words.end;t++) {
 		if(t->gen==gen) continue;
@@ -584,6 +588,7 @@ static void do_plan() {
 				if(--d<depth) break;
 				(*d)->o->gen++;
 				printf(" < %d/%d %*s'%s'\n", (*d)->o->gen, gen, (d-depth)*3, "", (*d)->o->s);
+				*p++=(*d)->o;
 				e=(*d)->n;
 			} else {
 				printf(" > %d/%d %*s'%s'\n", e->o->gen, gen, (d-depth)*3, "", e->o->s);
@@ -593,15 +598,18 @@ static void do_plan() {
 			}
 		}
 		t->gen++;
+		*p++=t;
 	}
+	*p=0;
 }
 
 static void do_compile() {
 	cc.b=ccode;
-	struct tag *e;
+	struct tag **t;
+	do_plan();
 	dec=decs;
-	for(e=words.heads;e<words.end;e++) { compilelist(e); }
-	for(e=datas.heads;e<datas.end;e++) { execute(compiledata(e)); e->data=realloc(e->data,*stack++); }
+	for(t=plan;*t;t++) { compilelist(*t); }
+	//for(e=datas.heads;e<datas.end;e++) { execute(compiledata(e)); e->data=realloc(e->data,*stack++); }
 	while(--dec>=decs) {
 		*dec->p=dec->w->t==data?((uint32_t)dec->w->data) : ((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
 	}
