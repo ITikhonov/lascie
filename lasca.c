@@ -22,7 +22,7 @@ static cairo_t *cr=0;
 static int button_height=0;
 uint8_t gen=0;
 
-enum nmflag { compiled, data, macro, command, builtin };
+enum nmflag { compiled, macro, command, builtin };
 
 struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; struct e *def; uint8_t gen; };
 
@@ -34,7 +34,6 @@ struct voc { struct tag heads[256], *end; };
 static struct voc commands = {.end=commands.heads};
 static struct voc builtins = {.end=builtins.heads};
 static struct voc words = {.end=words.heads};
-static struct voc datas = {.end=datas.heads};
 
 struct editor { struct tag *tag; struct e **pos; int x, y; } edit;
 
@@ -59,7 +58,6 @@ inline void saveword(struct tag *t, FILE *f) {
 		switch(e->o->t) {
 			case builtin: v=&builtins; break;
 			case command: v=&commands; break;
-			case data: v=&datas; break;
 			case compiled: v=&words; break;
 		}
 		uint16_t n = e->o - v->heads;
@@ -71,7 +69,6 @@ inline void saveword(struct tag *t, FILE *f) {
 static void do_save() {
 	struct tag *t;
 	FILE *f=fopen("save","w");
-	for(t=datas.heads;t<datas.end;t++) { saveword(t,f); }
 	for(t=words.heads;t<words.end;t++) { saveword(t,f); }
 	fwrite("\xff",1,1,f);
 	fclose(f);
@@ -87,7 +84,6 @@ static void resize(struct tag *c) {
 static void do_load() {
 	FILE *f=fopen("save","r");
 
-	datas.end=datas.heads;
 	words.end=words.heads;
 
 	for(;;) {
@@ -98,7 +94,6 @@ static void do_load() {
 
 		switch(tp) {
 			case compiled: t=words.end++; break;
-			case data: t=datas.end++; break;
 			default: abort();
 		}
 
@@ -120,7 +115,6 @@ static void do_load() {
 			switch(tp) {
 				case builtin: v=&builtins; break;
 				case command: v=&commands; break;
-				case data: v=&datas; break;
 				case compiled: v=&words; break;
 			}
 
@@ -145,14 +139,13 @@ static struct tag *add(int x, int y, char *s, void *f, int len, int t) {
 	switch(t) {
 	case builtin: c=builtins.end++; break;
 	case command: c=commands.end++; break;
-	case data: c=datas.end++; break;
 	default: c=words.end++;
 	}
 
 	c->x=x; c->y=y; c->t=t; c->data=f; c->l=len; c->nospace=nospace; c->gen=gen;
 	strncpy(c->s,s,7);
 	resize(c);
-	c->def=(t==compiled||t==data)?&final:0;
+	c->def=t==compiled?&final:0;
 	return c;
 }
 
@@ -161,11 +154,6 @@ static void openeditor(struct tag *t) {
 }
 
 static void do_create() { openeditor(add(100,100,"",0,0,compiled)); }
-static void do_data() {
-	if(edit.tag) { (*edit.pos)->t=data; }
-	else { openeditor(add(100,100,"",0,0,data)); }
-	draw();
-}
 
 static void do_compile();
 static void do_plan();
@@ -245,8 +233,6 @@ void init(cairo_t *cr1) {
 	cairo_text_extents(cr,"abcdefghijklmnopqrstuvwxyz0123456789;",&te);
 	button_height=te.height;
 
-	add(30,110,"data", do_data,0,command);
-
 	nospace=1;
 
 	add(285,310,"h", compile_h,0,builtin);
@@ -316,7 +302,6 @@ void normalcolor()  {cairo_set_source_rgb(cr,0.5,0.9,0.5);}
 void builtincolor() {cairo_set_source_rgb(cr,0.9,0.5,0.9);}
 void macrocolor()   {cairo_set_source_rgb(cr,0.5,0.5,0.9);}
 void commandcolor() {cairo_set_source_rgb(cr,0.9,0.5,0.5);}
-void datacolor()    {cairo_set_source_rgb(cr,0.9,0.9,0.5);}
 
 inline void dullcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.8); }
 inline void selectcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.0); }
@@ -371,7 +356,6 @@ void draweditor(struct editor *ed) {
 		switch(e->t) {
 			case builtin: builtincolor(); break;
 			case command: commandcolor(); break;
-			case data: datacolor(); break;
 			case compiled: normalcolor(); break;
 			case macro: macrocolor(); break;
 		}
@@ -388,7 +372,6 @@ void draw() {
 
 	struct tag *e;
 	for(e=builtins.heads;e<builtins.end;e++) { builtincolor(); drawtag(e); }
-	for(e=datas.heads;e<datas.end;e++) { datacolor(); drawtag(e); }
 	for(e=words.heads;e<words.end;e++) { normalcolor(); drawtag(e); }
 	for(e=commands.heads;e<commands.end;e++) { commandcolor(); drawtag(e); }
 
@@ -518,24 +501,14 @@ static void delay(struct tag *w) {
 	dec->p=cc.i++; dec->w=w; dec++;
 }
 
-inline void *compiledata(struct tag *t) {
-	void *beginning=cc.b;
-	fwjump=fwjumps;
-	bwjump=bwjumps;
-	struct e *e=t->def;
-	for(;e;e=e->n) {
-		if(e->o->t == macro) { void (*f)(struct e *e) = e->o->data; f(e); }
-	}
-	cc.b=beginning;
-	return beginning;
-}
-
+uint8_t *beg;
 
 inline void compilelist(struct tag *t) {
 	printf("compile %s\n", t->s);
-	t->data=cc.b;
 	fwjump=fwjumps;
 	bwjump=bwjumps;
+
+	beg=cc.b;
 
 	gen++;
 	t->gen++;
@@ -544,17 +517,14 @@ inline void compilelist(struct tag *t) {
 	for(;e;e=e->n) {
 		switch(e->t) {
 		case builtin: { void (*f)(void)=e->o->data; f(); } break;
-		case data:
-			compile_dup();
-			*cc.b++=0xb8;
-			delay(e->o);
-			break;
 		default:
 			*cc.b++=0xe8;
-			if(t->gen!= gen) delay(e->o);
+			if(e->o->gen!=gen) { delay(e->o); }
+			else if(e->o==t) { *cc.i++=((uint8_t*)e->o->data)-(beg+4); }
 			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
 		}
 	}
+	t->data=beg;
 }
 
 struct tag *plan[256];
@@ -609,9 +579,8 @@ static void do_compile() {
 	do_plan();
 	dec=decs;
 	for(t=plan;*t;t++) { compilelist(*t); }
-	//for(e=datas.heads;e<datas.end;e++) { execute(compiledata(e)); e->data=realloc(e->data,*stack++); }
 	while(--dec>=decs) {
-		*dec->p=dec->w->t==data?((uint32_t)dec->w->data) : ((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
+		*dec->p=((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
 	}
 }
 
@@ -630,7 +599,7 @@ inline int clicktag(struct tag *t, int x1,int y1) {
 		e->n=*edit.pos;
 		*edit.pos=e;
 		edit.pos=&e->n;
-	} else if((t->t==data || t->t==compiled) && t==selected) {
+	} else if(t->t==compiled && t==selected) {
 		openeditor(t);
 	} else {
 		selected=t;
@@ -661,7 +630,6 @@ void release(int x1,int y1) {
 	for(e=commands.heads;e<commands.end;e++) { if(clickcommand(e,x1,y1)) return; }
 
 	for(e=words.heads;e<words.end;e++) { if(clicktag(e,x1,y1)) return; }
-	for(e=datas.heads;e<datas.end;e++) { if(clicktag(e,x1,y1)) return; }
 	for(e=builtins.heads;e<builtins.end;e++) { if(clicktag(e,x1,y1)) return; }
 
 	if(edit.tag) { edit.x=x1 & 0xfffffff0; edit.y=y1 & 0xfffffff0; draw(); return; }
