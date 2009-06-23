@@ -25,7 +25,7 @@ static cairo_t *cr=0;
 static int button_height=0;
 uint8_t gen=0;
 
-enum nmflag { compiled, data, macro, command, builtin };
+enum nmflag { compiled=0, data=1, macro=2, command=3, builtin=4 };
 
 struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; struct e *def; uint8_t gen; };
 
@@ -50,9 +50,9 @@ static void do_exit() { exit(0); }
 
 inline void saveword(struct tag *t, FILE *f) {
 	fwrite(&t->t,1,1,f);
-	fwrite(t->s,8,1,f);
 	fwrite(&t->x,4,1,f);
 	fwrite(&t->y,4,1,f);
+	fwrite(t->s,8,1,f);
 
 	struct e *e=t->def;
 	for(;e;e=e->n) {
@@ -60,8 +60,7 @@ inline void saveword(struct tag *t, FILE *f) {
 		struct voc *v;
 		switch(e->o->t) {
 			case builtin: v=&builtins; break;
-			case command: v=&commands; break;
-			case compiled: v=&words; break;
+			default: v=&words; break;
 		}
 		uint16_t n = e->o - v->heads;
 		fwrite(&n,2,1,f);
@@ -91,19 +90,16 @@ static void do_load() {
 
 	for(;;) {
 		uint8_t tp;
-		struct tag *t;
 		fread(&tp,1,1,f);
 		if(tp==0xff) break;
 
-		switch(tp) {
-			case compiled: t=words.end++; break;
-			default: abort();
-		}
+		struct tag *t=words.end++;
 
 		t->t=tp;
-		fread(t->s,8,1,f);
 		fread(&t->x,4,1,f);
 		fread(&t->y,4,1,f);
+		fread(t->s,8,1,f);
+		printf("name %s\n",t->s);
 		resize(t);
 		t->gen=gen;
 
@@ -112,20 +108,22 @@ static void do_load() {
 		for(;;) {
 			uint8_t tp;
 			fread(&tp,1,1,f);
+			printf("  type %x\n",tp);
 			if(tp==0xff) break;
 
 			struct voc *v;
 			switch(tp) {
 				case builtin: v=&builtins; break;
-				case command: v=&commands; break;
-				case compiled: v=&words; break;
+				default: v=&words; break;
 			}
 
 			uint16_t n;
 			fread(&n,2,1,f);
+			printf("  n    %d\n",n);
 
 			struct e *e=editcode_e++;
 			e->o=v->heads+n;
+			e->t=tp;
 			e->n=0;
 			*p=e;
 			p=&(e->n);
@@ -650,7 +648,7 @@ inline int clicktag(struct tag *t, int x1,int y1) {
 		e->n=*edit.pos;
 		*edit.pos=e;
 		edit.pos=&e->n;
-	} else if(t->t==compiled && t==selected) {
+	} else if(t->t!=builtin && t==selected) {
 		openeditor(t);
 	} else {
 		selected=t;
