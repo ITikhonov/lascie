@@ -15,6 +15,9 @@
 #define XK_MISCELLANY
 #include <X11/keysymdef.h>
 
+#define NDEBUG
+#include <assert.h>
+
 int max(int x,int y) { return x>y?x:y; }
 int min(int x,int y) { return x>y?y:x; }
 
@@ -22,7 +25,7 @@ static cairo_t *cr=0;
 static int button_height=0;
 uint8_t gen=0;
 
-enum nmflag { compiled, macro, command, builtin };
+enum nmflag { compiled, data, macro, command, builtin };
 
 struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; struct e *def; uint8_t gen; };
 
@@ -206,8 +209,14 @@ static void do_execute() {
 	draw();
 }
 
-static void do_macro() { if(edit.tag) (*edit.pos)->t=macro; draw(); }
-static void do_normal() { if(edit.tag) (*edit.pos)->t=compiled; draw(); }
+inline void change_type(enum nmflag p) {
+	if(edit.tag) (*edit.pos)->t=p;
+	else if(selected) selected->t=p;
+	draw();
+}
+static void do_macro() { change_type(macro); }
+static void do_normal() { change_type(compiled); }
+static void do_data() { change_type(data); }
 
 
 static void do_ping(void) { puts("PONG"); }
@@ -222,6 +231,7 @@ static void compile_over();
 static void compile_swap();
 static void compile_spot();
 static void compile_h();
+static void compile_allot();
 
 void init(cairo_t *cr1) {
 	cr=cr1;
@@ -295,12 +305,15 @@ void init(cairo_t *cr1) {
 
 	add(30,150,"macro",do_macro,0,command);
 	add(30,170,"normal",do_normal,0,command);
-	add(30,190,"plan",do_plan,0,command);
+	add(30,190,"data",do_data,0,command);
+	add(30,210,"plan",do_plan,0,command);
+	add(120,270,"allot", compile_allot,0,builtin);
 }
 
 void normalcolor()  {cairo_set_source_rgb(cr,0.5,0.9,0.5);}
 void builtincolor() {cairo_set_source_rgb(cr,0.9,0.5,0.9);}
 void macrocolor()   {cairo_set_source_rgb(cr,0.5,0.5,0.9);}
+void datacolor()    {cairo_set_source_rgb(cr,0.9,0.9,0.5);}
 void commandcolor() {cairo_set_source_rgb(cr,0.9,0.5,0.5);}
 
 inline void dullcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.8); }
@@ -335,13 +348,24 @@ void drawstack() {
 	cairo_stroke(cr);
 }
 
+void typecolor(enum nmflag t) {
+	switch(t) {
+		case builtin: builtincolor(); break;
+		case command: commandcolor(); break;
+		case compiled: normalcolor(); break;
+		case macro: macrocolor(); break;
+		case data: datacolor(); break;
+	}
+}
 
 void drawtag(struct tag *t) {
 	x=t->x; y=t->y;
 	if(t==selected) selectcolor();
+	else typecolor(t->t);
 	pad(t);
 	textcolor(); text(t);
 }
+
 
 void draweditor(struct editor *ed) {
 	x=ed->x; y=ed->y;
@@ -353,12 +377,7 @@ void draweditor(struct editor *ed) {
 	if(!e) return;
 	for(;e;e=e->n) {
 		if(e==*edit.pos) y-=button_height/4;
-		switch(e->t) {
-			case builtin: builtincolor(); break;
-			case command: commandcolor(); break;
-			case compiled: normalcolor(); break;
-			case macro: macrocolor(); break;
-		}
+		typecolor(e->t);
 		pad(e->o);
 		textcolor(); text(e->o);
 		if(e==*edit.pos) y+=button_height/4;
@@ -498,7 +517,27 @@ static void compile_spot() {
 }
 
 static void delay(struct tag *w) {
+	*cc.i=0;
 	dec->p=cc.i++; dec->w=w; dec++;
+}
+
+int execute_it=0;
+struct tag *current;
+
+static void do_allot() {
+	register uint32_t *stack asm("esi");
+	current->l = (stack[0]);
+	printf("realloc %08x (%d)", (uint32_t)current->data, current->l);
+	current->data=realloc(current->data,current->l);
+	printf(" -> %08x (%d)\n", (uint32_t)current->data, current->l);
+}
+
+static void compile_allot() {
+	execute_it=1;
+	compile_dup();
+	compile_call(do_allot);
+	compile_drop();
+	compile_drop();
 }
 
 uint8_t *beg;
@@ -507,16 +546,26 @@ inline void compilelist(struct tag *t) {
 	printf("compile %s\n", t->s);
 	fwjump=fwjumps;
 	bwjump=bwjumps;
+	execute_it=0;
+	current = t;
 
 	beg=cc.b;
 
-	gen++;
 	t->gen++;
 
 	struct e *e=t->def;
 	for(;e;e=e->n) {
 		switch(e->t) {
 		case builtin: { void (*f)(void)=e->o->data; f(); } break;
+		case data:
+			compile_dup();
+			assert(e->o->gen==gen);
+			compile_imm((uint32_t)e->o->data);
+			break;
+		case macro:
+			assert(e->o->gen==gen);
+			execute(e->o->data);
+			break;
 		default:
 			*cc.b++=0xe8;
 			if(e->o->gen!=gen) { delay(e->o); }
@@ -524,7 +573,8 @@ inline void compilelist(struct tag *t) {
 			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
 		}
 	}
-	t->data=beg;
+	if(execute_it) execute((void *)beg);
+	else t->data=beg;
 }
 
 struct tag *plan[256];
@@ -578,6 +628,7 @@ static void do_compile() {
 	struct tag **t;
 	do_plan();
 	dec=decs;
+	gen++;
 	for(t=plan;*t;t++) { compilelist(*t); }
 	while(--dec>=decs) {
 		*dec->p=((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
