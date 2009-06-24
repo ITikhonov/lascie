@@ -519,19 +519,18 @@ static void delay(struct tag *w) {
 	dec->p=cc.i++; dec->w=w; dec++;
 }
 
-int execute_it=0;
 struct tag *current;
 
 static void do_allot() {
 	register uint32_t *stack asm("esi");
-	current->l = (stack[0]);
-	printf("realloc %08x (%d)", (uint32_t)current->data, current->l);
-	current->data=realloc(current->data,current->l);
-	printf(" -> %08x (%d)\n", (uint32_t)current->data, current->l);
+	void *data=(void*)stack[1];
+	uint32_t len=stack[0];
+	printf("realloc %08x", (uint32_t)data);
+	stack[1]=(uint32_t)realloc(data,len);
+	printf(" -> %08x (%d)\n", (uint32_t)stack[1], len);
 }
 
 static void compile_allot() {
-	execute_it=1;
 	compile_dup();
 	compile_call(do_allot);
 	compile_drop();
@@ -544,7 +543,6 @@ inline void compilelist(struct tag *t) {
 	printf("compile %s\n", t->s);
 	fwjump=fwjumps;
 	bwjump=bwjumps;
-	execute_it=0;
 	current = t;
 
 	beg=cc.b;
@@ -571,7 +569,11 @@ inline void compilelist(struct tag *t) {
 			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
 		}
 	}
-	if(execute_it) execute((void *)beg);
+	if(t->t==data) {
+		*(--stack)=(uint32_t)(t->data);
+		execute((void *)beg);
+		t->data=(void *)(*(stack++));
+	}
 	else t->data=beg;
 }
 
