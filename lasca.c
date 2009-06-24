@@ -27,7 +27,7 @@ uint8_t gen=0;
 
 enum nmflag { compiled=0, data=1, macro=2, command=3, builtin=4 };
 
-struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t l; uint8_t nospace; struct e *def; uint8_t gen; };
+struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t len; uint8_t nospace; struct e *def; uint8_t gen; };
 
 static struct e { struct e *n; enum nmflag t; struct tag *o; } editcode[1024];
 static struct e *editcode_e=editcode;
@@ -143,7 +143,7 @@ static struct tag *add(int x, int y, char *s, void *f, int len, int t) {
 	default: c=words.end++;
 	}
 
-	c->x=x; c->y=y; c->t=t; c->data=f; c->l=len; c->nospace=nospace; c->gen=gen;
+	c->x=x; c->y=y; c->t=t; c->data=f; c->len=len; c->nospace=nospace; c->gen=gen;
 	strncpy(c->s,s,7);
 	resize(c);
 	c->def=t==compiled?&final:0;
@@ -206,6 +206,8 @@ static void do_execute() {
 	else if(selected && selected->data) { execute(selected->data); }
 	draw();
 }
+
+static void do_hexed();
 
 inline void change_type(enum nmflag p) {
 	if(edit.tag) (*edit.pos)->t=p;
@@ -304,7 +306,7 @@ void init(cairo_t *cr1) {
 	add(30,150,"macro",do_macro,0,command);
 	add(30,170,"normal",do_normal,0,command);
 	add(30,190,"data",do_data,0,command);
-	add(30,210,"plan",do_plan,0,command);
+	add(30,210,"hexed",do_hexed,0,command);
 	add(120,270,"allot", compile_allot,0,builtin);
 }
 
@@ -383,6 +385,43 @@ void draweditor(struct editor *ed) {
 	}
 }
 
+struct hexeditor { struct tag *tag; int x,y,pos; } hexed;
+
+static void do_hexed() {
+	if(edit.tag) { hexed.tag=edit.tag; hexed.y=edit.y+button_height+5; hexed.x=edit.x; draw(); }
+}
+
+inline void drawbyte(uint8_t c) {
+	char *hex="0123456789abcdef";
+	char b[3]={hex[c>>4],hex[c&0xf],0};
+	cairo_move_to(cr,x,y+button_height);
+	cairo_show_text(cr,b);
+	cairo_stroke(cr);
+}
+
+void drawhexeditor(struct hexeditor *ed) {
+	x=ed->x; y=ed->y;
+	typecolor(data); pad(ed->tag);
+	textcolor(); text(ed->tag);
+	x+=ed->tag->w;
+
+	uint8_t *p=ed->tag->data;
+	uint8_t *e=ed->tag->data;
+	e+=ed->tag->len;
+
+	int pos=0;
+	while(p<e) {
+		drawbyte(*p++);
+		if(pos==15) {
+			y+=button_height+5;
+			x-=15*16;
+			pos=0;
+			continue;
+		}
+		x+=16; pos++;
+	}
+}
+
 void draw() {
 	cairo_set_source_rgb(cr,255,255,255);
 	cairo_paint(cr);
@@ -393,6 +432,7 @@ void draw() {
 	for(e=commands.heads;e<commands.end;e++) { commandcolor(); drawtag(e); }
 
 	if(edit.tag) draweditor(&edit);
+	if(hexed.tag) drawhexeditor(&hexed);
 
 	drawstack();
 }
@@ -528,6 +568,7 @@ static void do_allot() {
 	printf("realloc %08x", (uint32_t)data);
 	stack[1]=(uint32_t)realloc(data,len);
 	printf(" -> %08x (%d)\n", (uint32_t)stack[1], len);
+	current->len=len;
 }
 
 static void compile_allot() {
