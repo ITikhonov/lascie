@@ -38,7 +38,7 @@ static struct voc commands = {.end=commands.heads};
 static struct voc builtins = {.end=builtins.heads};
 static struct voc words = {.end=words.heads};
 
-struct editor { struct tag *tag; struct e **pos; int x, y; } edit;
+struct editor { struct tag *tag; struct e **pos; int x, y; } editor;
 
 static struct e final={.n=0,.t=builtin};
 
@@ -151,7 +151,7 @@ static struct tag *add(int x, int y, char *s, void *f, int len, int t) {
 }
 
 static void openeditor(struct tag *t) {
-	edit.tag=t; edit.x=edit.tag->x; edit.y=edit.tag->y+button_height+5; edit.pos=&(edit.tag->def); draw();
+	editor.tag=t; editor.x=editor.tag->x; editor.y=editor.tag->y+button_height+5; editor.pos=&(editor.tag->def); draw();
 }
 
 static void do_create() { openeditor(add(100,100,"",0,0,compiled)); }
@@ -202,7 +202,7 @@ static void execute(void (*f)(void)) {
 }
 
 static void do_execute() {
-	if(edit.tag && edit.tag->data) { execute(edit.tag->data); }
+	if(editor.tag && editor.tag->data) { execute(editor.tag->data); }
 	else if(selected && selected->data) { execute(selected->data); }
 	draw();
 }
@@ -210,7 +210,7 @@ static void do_execute() {
 static void do_hexed();
 
 inline void change_type(enum nmflag p) {
-	if(edit.tag) (*edit.pos)->t=p;
+	if(editor.tag) (*editor.pos)->t=p;
 	else if(selected) selected->t=p;
 	draw();
 }
@@ -358,8 +358,12 @@ void typecolor(enum nmflag t) {
 	}
 }
 
+inline void shift(int *y) { if(*y>100-(button_height+5)) *y+=2*(button_height+5); }
+inline void unshift(int *y) { if(*y>100+2*(button_height+5)) *y-=2*(button_height+5); }
+
 void drawtag(struct tag *t) {
 	x=t->x; y=t->y;
+	shift(&y);
 	if(t==selected) selectcolor();
 	else typecolor(t->t);
 	pad(t);
@@ -368,7 +372,7 @@ void drawtag(struct tag *t) {
 
 
 void draweditor(struct editor *ed) {
-	x=ed->x; y=ed->y;
+	x=ed->x; y=100;
 	dullcolor(); pad(ed->tag);
 	textcolor(); text(ed->tag);
 	x+=ed->tag->w;
@@ -376,11 +380,11 @@ void draweditor(struct editor *ed) {
 	struct e *e=ed->tag->def;
 	if(!e) return;
 	for(;e;e=e->n) {
-		if(e==*edit.pos) y-=button_height/4;
+		if(e==*(ed->pos)) y-=button_height/4;
 		typecolor(e->t);
 		pad(e->o);
 		textcolor(); text(e->o);
-		if(e==*edit.pos) y+=button_height/4;
+		if(e==*(ed->pos)) y+=button_height/4;
 		x+=e->o->w;
 	}
 }
@@ -388,7 +392,7 @@ void draweditor(struct editor *ed) {
 struct hexeditor { struct tag *tag; int x,y,pos; } hexed;
 
 static void do_hexed() {
-	if(edit.tag) { hexed.tag=edit.tag; hexed.y=edit.y+button_height+5; hexed.x=edit.x; draw(); }
+	if(editor.tag) { hexed.tag=editor.tag; hexed.y=editor.y+button_height+5; hexed.x=editor.x; draw(); }
 }
 
 inline void drawbyte(uint8_t c) {
@@ -423,15 +427,21 @@ void drawhexeditor(struct hexeditor *ed) {
 }
 
 void draw() {
-	cairo_set_source_rgb(cr,255,255,255);
+	if(!editor.tag) cairo_set_source_rgb(cr,1,1,1);
+	else cairo_set_source_rgb(cr,0.9,0.9,0.9);
 	cairo_paint(cr);
+
+	if(editor.tag) cairo_set_source_rgb(cr,1,1,1);
+	else cairo_set_source_rgb(cr,0.9,0.9,0.9);
+	cairo_rectangle(cr,0,100,1000,button_height+5);
+	cairo_fill(cr);
 
 	struct tag *e;
 	for(e=builtins.heads;e<builtins.end;e++) { builtincolor(); drawtag(e); }
 	for(e=words.heads;e<words.end;e++) { normalcolor(); drawtag(e); }
 	for(e=commands.heads;e<commands.end;e++) { commandcolor(); drawtag(e); }
 
-	if(edit.tag) draweditor(&edit);
+	if(editor.tag) draweditor(&editor);
 	if(hexed.tag) drawhexeditor(&hexed);
 
 	drawstack();
@@ -684,13 +694,13 @@ inline int clickcommand(struct tag *e, int x1,int y1) {
 
 inline int clicktag(struct tag *t, int x1,int y1) {
 	if(!(t->y<=y1 && y1<=t->y+t->h && x1>t->x && x1<t->x+t->w)) return 0;
-	if(edit.tag) {
+	if(editor.tag) {
 		struct e *e=editcode_e++;
 		e->o=t;
 		e->t=t->t;
-		e->n=*edit.pos;
-		*edit.pos=e;
-		edit.pos=&e->n;
+		e->n=*editor.pos;
+		*editor.pos=e;
+		editor.pos=&e->n;
 	} else if(t->t!=builtin && t==selected) {
 		openeditor(t);
 	} else {
@@ -701,10 +711,10 @@ inline int clicktag(struct tag *t, int x1,int y1) {
 }
 
 inline int clickeditor(struct editor *ed, int x1, int y1) {
-	if(!(ed->y<=y1 && y1<=ed->y+button_height+5 && x1>ed->x)) return 0;
+	if(!(y1>=100 && y1<=100+button_height+5 && x1>ed->x)) return 0;
 
 	x=ed->x+ed->tag->w; y=ed->y;
-	if(x1<=x) { edit.tag=0; draw(); return 1; }
+	if(x1<=x) { ed->tag=0; draw(); return 1; }
 
 	struct e **p=&ed->tag->def;
 	for(;*p;p=&(*p)->n) {
@@ -716,42 +726,47 @@ inline int clickeditor(struct editor *ed, int x1, int y1) {
 
 void release(int x1,int y1) {
 	struct tag *e;
+	if(editor.tag) { if(clickeditor(&editor,x1,y1)) return; }
 
-	if(edit.tag) { if(clickeditor(&edit,x1,y1)) return; }
-
+	unshift(&y1);
 	for(e=commands.heads;e<commands.end;e++) { if(clickcommand(e,x1,y1)) return; }
 
 	for(e=words.heads;e<words.end;e++) { if(clicktag(e,x1,y1)) return; }
 	for(e=builtins.heads;e<builtins.end;e++) { if(clicktag(e,x1,y1)) return; }
 
-	if(edit.tag) { edit.x=x1 & 0xfffffff0; edit.y=y1 & 0xfffffff0; draw(); return; }
-	if(selected) { selected->x=x1 & 0xfffffff0; selected->y=y1 & 0xfffffff0; draw(); return; }
+	if(editor.tag) { editor.tag=0; }
+	else if(selected) { selected->x=x1 & 0xfffffff0; selected->y=y1 & 0xfffffff0; draw(); return; }
 
 	draw();
 }
 
 void button(int x1, int y1) {
+	shift(&y1);
+	unshift(&y1);
+	cairo_set_source_rgb(cr,0.8,0.8,0.8);
+	cairo_arc(cr,x1,y1,10,0,7);
+	cairo_stroke(cr);
 }
 
 void key(int k) {
-	if(edit.tag) {
+	if(editor.tag) {
 		switch(k) {
 			case XK_BackSpace:
-				edit.tag->s[strlen(edit.tag->s)-1]=0;
-				resize(edit.tag);
+				editor.tag->s[strlen(editor.tag->s)-1]=0;
+				resize(editor.tag);
 				draw();
 				break;
 			case XK_Delete:
-				if((*edit.pos)->n) { *(edit.pos)=(*edit.pos)->n; draw(); } break;
+				if((*editor.pos)->n) { *(editor.pos)=(*editor.pos)->n; draw(); } break;
 			case XK_Return:
-				edit.tag=0; draw(); break;
+				editor.tag=0; draw(); break;
 			case '0'...'9':
 			case 'a'...'z': {
-				char *s=edit.tag->s;
+				char *s=editor.tag->s;
 				int l=strlen(s);
 				s[l]=k;
 				s[l+1]=0;
-				resize(edit.tag);
+				resize(editor.tag);
 				draw();
 				}
 		}
