@@ -18,12 +18,12 @@
 #define NDEBUG
 #include <assert.h>
 
-int max(int x,int y) { return x>y?x:y; }
-int min(int x,int y) { return x>y?y:x; }
+static inline int max(int x,int y) { return x>y?x:y; }
+static inline int min(int x,int y) { return x>y?y:x; }
 
 static cairo_t *cr=0;
 static int button_height=0;
-uint8_t gen=0;
+static uint8_t gen=0;
 
 enum nmflag { compiled=0, data=1, macro=2, command=3, builtin=4 };
 
@@ -38,17 +38,17 @@ static struct voc commands = {.end=commands.heads};
 static struct voc builtins = {.end=builtins.heads};
 static struct voc words = {.end=words.heads};
 
-struct editor { struct tag *tag; struct e **pos; int x, y; } editor;
+static struct editor { struct tag *tag; struct e **pos; int x, y; } editor;
 
 static struct e final={.n=0,.t=builtin};
 
-struct tag *selected=0;
+static struct tag *selected=0;
 
 void draw();
 
 static void do_exit() { exit(0); }
 
-inline void saveword(struct tag *t, FILE *f) {
+static inline void saveword(struct tag *t, FILE *f) {
 	fwrite(&t->t,1,1,f);
 	fwrite(&t->x,4,1,f);
 	fwrite(&t->y,4,1,f);
@@ -134,7 +134,7 @@ static void do_load() {
 }
 
 
-int nospace=0;
+static int nospace=0;
 static struct tag *add(int x, int y, char *s, void *f, int len, int t) {
 	struct tag *c;
 	switch(t) {
@@ -166,7 +166,7 @@ static void do_end();
 static void compile_begin();
 static void compile_rewind();
 
-void compile_neg();
+static void compile_neg();
 static void compile_0();
 static void compile_1();
 static void compile_2();
@@ -188,7 +188,7 @@ static void compile_h();
 static void compile_fetch();
 static void compile_store();
 
-uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
+static uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
 
 static void execute(void (*f)(void)) {
 	asm volatile (
@@ -209,7 +209,7 @@ static void do_execute() {
 
 static void do_hexed();
 
-inline void change_type(enum nmflag p) {
+static inline void change_type(enum nmflag p) {
 	if(editor.tag) (*editor.pos)->t=p;
 	else if(selected) selected->t=p;
 	draw();
@@ -310,31 +310,31 @@ void init(cairo_t *cr1) {
 	add(120,270,"allot", compile_allot,0,builtin);
 }
 
-void normalcolor()  {cairo_set_source_rgb(cr,0.5,0.9,0.5);}
-void builtincolor() {cairo_set_source_rgb(cr,0.9,0.5,0.9);}
-void macrocolor()   {cairo_set_source_rgb(cr,0.5,0.5,0.9);}
-void datacolor()    {cairo_set_source_rgb(cr,0.9,0.9,0.5);}
-void commandcolor() {cairo_set_source_rgb(cr,0.9,0.5,0.5);}
+static void normalcolor()  {cairo_set_source_rgb(cr,0.5,0.9,0.5);}
+static void builtincolor() {cairo_set_source_rgb(cr,0.9,0.5,0.9);}
+static void macrocolor()   {cairo_set_source_rgb(cr,0.5,0.5,0.9);}
+static void datacolor()    {cairo_set_source_rgb(cr,0.9,0.9,0.5);}
+static void commandcolor() {cairo_set_source_rgb(cr,0.9,0.5,0.5);}
 
-inline void dullcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.8); }
-inline void selectcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.0); }
+static inline void dullcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.8); }
+static inline void selectcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.0); }
 
-inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
+static inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
 
 static int x,y;
 
-inline void pad(struct tag *o) {
+static inline void pad(struct tag *o) {
 	cairo_rectangle(cr,x,y,o->w,o->h);
 	cairo_fill(cr);
 }
 
-inline void text(struct tag *o) {
+static inline void text(struct tag *o) {
 	cairo_move_to(cr, x+(o->nospace?0:5), y+button_height);
 	cairo_show_text(cr, o->s);
 	cairo_stroke(cr);
 }
 
-void drawstack() {
+static void drawstack() {
 	char s[10];
 	cairo_move_to(cr, 5, 5+button_height);
 	uint32_t *p=stack;
@@ -348,7 +348,7 @@ void drawstack() {
 	cairo_stroke(cr);
 }
 
-void typecolor(enum nmflag t) {
+static void typecolor(enum nmflag t) {
 	switch(t) {
 		case builtin: builtincolor(); break;
 		case command: commandcolor(); break;
@@ -358,10 +358,10 @@ void typecolor(enum nmflag t) {
 	}
 }
 
-inline void shift(int *y) { if(*y>100-(button_height+5)) *y+=2*(button_height+5); }
-inline void unshift(int *y) { if(*y>100+2*(button_height+5)) *y-=2*(button_height+5); }
+static inline void shift(int *y) { if(*y>100-(button_height+5)) *y+=2*(button_height+5); }
+static inline void unshift(int *y) { if(*y>100+2*(button_height+5)) *y-=2*(button_height+5); }
 
-void drawtag(struct tag *t) {
+static void drawtag(struct tag *t) {
 	x=t->x; y=t->y;
 	shift(&y);
 	if(t==selected) selectcolor();
@@ -371,7 +371,7 @@ void drawtag(struct tag *t) {
 }
 
 
-void draweditor(struct editor *ed) {
+static void draweditor(struct editor *ed) {
 	x=ed->x; y=100;
 	dullcolor(); pad(ed->tag);
 	textcolor(); text(ed->tag);
@@ -389,13 +389,13 @@ void draweditor(struct editor *ed) {
 	}
 }
 
-struct hexeditor { struct tag *tag; int x,y,pos; } hexed;
+static struct hexeditor { struct tag *tag; int x,y,pos; } hexed;
 
 static void do_hexed() {
 	if(editor.tag) { hexed.tag=editor.tag; hexed.y=editor.y+button_height+5; hexed.x=editor.x; draw(); }
 }
 
-inline void drawbyte(uint8_t c) {
+static inline void drawbyte(uint8_t c) {
 	char *hex="0123456789abcdef";
 	char b[3]={hex[c>>4],hex[c&0xf],0};
 	cairo_move_to(cr,x,y+button_height);
@@ -403,7 +403,7 @@ inline void drawbyte(uint8_t c) {
 	cairo_stroke(cr);
 }
 
-void drawhexeditor(struct hexeditor *ed) {
+static void drawhexeditor(struct hexeditor *ed) {
 	x=ed->x; y=ed->y;
 	typecolor(data); pad(ed->tag);
 	textcolor(); text(ed->tag);
@@ -454,7 +454,7 @@ static struct { int32_t *p; struct tag *w; } decs[1024], *dec=decs;
 static void compile_imm(int32_t x) { *cc.b++=0xb8; *cc.i++=x; }
 
 
-int n=0, n_sign=1, base=10;
+static int n=0, n_sign=1, base=10;
 void compile_neg() { n_sign=-1; }
 void compile_0() { n=n*base; }
 void compile_1() { n=n*base+1; }
@@ -490,10 +490,8 @@ void compile_e() { convert_h(); n=n*16+14; }
 void compile_f() { convert_h(); n=n*16+15; }
 void compile_h() { convert_h(); compile_n(); }
 
-struct e *compilednow=0;
-
 static void do_ret() { *cc.b++=0xc3; }
-int8_t *fwjumps[8], **fwjump;
+static int8_t *fwjumps[8], **fwjump;
 static void do_if() {
 	*cc.b++=0x75;
 	*fwjump++=cc.c++;
@@ -506,7 +504,7 @@ static void do_end() {
 	**fwjump = cc.b - (uint8_t*)((*fwjump)+1);
 }
 
-int8_t *bwjumps[8], **bwjump;
+static int8_t *bwjumps[8], **bwjump;
 static void compile_begin() {
 	*bwjump++=cc.c;
 }
@@ -547,7 +545,7 @@ static void compile_sub() { *cc.b++=0x2b; *cc.b++=0x06; compile_nip(); }
 static void compile_over() { compile_dup(); *cc.b++=0x8b; *cc.b++=0x46; *cc.b++=0x04; }
 static void compile_swap() { *cc.b++=0x87; *cc.b++=0x06; }
 
-void compile_call(void *a) { *cc.b++=0xe8; *cc.i++=((uint8_t*)a)-(cc.b+4); }
+static void compile_call(void *a) { *cc.b++=0xe8; *cc.i++=((uint8_t*)a)-(cc.b+4); }
 
 static void do_spot() {
 	register uint32_t *stack asm("esi");
@@ -569,7 +567,7 @@ static void delay(struct tag *w) {
 	dec->p=cc.i++; dec->w=w; dec++;
 }
 
-struct tag *current;
+static struct tag *current;
 
 static void do_allot() {
 	register uint32_t *stack asm("esi");
@@ -588,9 +586,9 @@ static void compile_allot() {
 	compile_drop();
 }
 
-uint8_t *beg;
+static uint8_t *beg;
 
-inline void compilelist(struct tag *t) {
+static inline void compilelist(struct tag *t) {
 	printf("compile %s\n", t->s);
 	fwjump=fwjumps;
 	bwjump=bwjumps;
@@ -628,7 +626,7 @@ inline void compilelist(struct tag *t) {
 	else t->data=beg;
 }
 
-struct tag *plan[256];
+static struct tag *plan[256];
 
 static void do_plan() {
 	struct tag *t;
@@ -686,13 +684,13 @@ static void do_compile() {
 	}
 }
 
-inline int clickcommand(struct tag *e, int x1,int y1) {
+static inline int clickcommand(struct tag *e, int x1,int y1) {
 	if(!(e->y<=y1 && y1<=e->y+e->h && x1>e->x && x1<e->x+e->w)) return 0;
 	void (*f)(void)=(void *)e->data; f(); return 1;
 }
 
 
-inline int clicktag(struct tag *t, int x1,int y1) {
+static inline int clicktag(struct tag *t, int x1,int y1) {
 	if(!(t->y<=y1 && y1<=t->y+t->h && x1>t->x && x1<t->x+t->w)) return 0;
 	if(editor.tag) {
 		struct e *e=editcode_e++;
@@ -710,7 +708,7 @@ inline int clicktag(struct tag *t, int x1,int y1) {
 	return 1;
 }
 
-inline int clickeditor(struct editor *ed, int x1, int y1) {
+static inline int clickeditor(struct editor *ed, int x1, int y1) {
 	if(!(y1>=100 && y1<=100+button_height+5 && x1>ed->x)) return 0;
 
 	x=ed->x+ed->tag->w; y=ed->y;
