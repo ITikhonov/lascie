@@ -10,15 +10,8 @@
 extern uint8_t gen;
 
 static struct e editcode[1024];
-struct e *editcode_e=editcode;
-
-struct voc commands = {.end=commands.heads};
-struct voc builtins = {.end=builtins.heads};
-struct voc words = {.end=words.heads};
 
 static struct e final={.n=0,.t=builtin};
-
-void draw();
 
 static void do_exit() { exit(0); }
 
@@ -138,6 +131,7 @@ static void do_data() { change_type(data); }
 static void do_ping(void) { puts("PONG"); }
 
 void init(cairo_t *cr) {
+	editcode_e=editcode;
 	drawinit(cr);
 	
 	add(30,290,"ping", do_ping,0,command);

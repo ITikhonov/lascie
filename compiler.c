@@ -6,15 +6,9 @@
 #include "common.h"
 #include "lasca.h"
 
-uint8_t gen=0;
-
-extern struct voc words;
-
 static union ic { uint8_t *b; int8_t *c; int32_t *i; void *v; } cc;
 static uint8_t ccode[65535];
 static struct { int32_t *p; struct tag *w; } decs[1024], *dec=decs;
-
-uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
 
 void execute(void (*f)(void)) {
 	asm volatile (

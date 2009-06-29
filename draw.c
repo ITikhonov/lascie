@@ -7,10 +7,7 @@
 #include "lasca.h"
 
 static cairo_t *cr=0;
-int button_height=0;
 
-struct editor { struct tag *tag; struct e **pos; int x, y; } editor;
-struct tag *selected=0;
 void draw();
 
 void resize(struct tag *c) {
@@ -18,7 +15,6 @@ void resize(struct tag *c) {
 	cairo_text_extents(cr,c->s,&te);
 	c->w=te.x_advance+(c->nospace?0:10); c->h=button_height+5;
 }
-
 
 void openeditor(struct tag *t) {
 	editor.tag=t; editor.x=editor.tag->x; editor.y=editor.tag->y+button_height+5; editor.pos=&(editor.tag->def); draw();
