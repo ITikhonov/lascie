@@ -110,17 +110,13 @@ struct tag *add(int x, int y, char *s, void *f, int len, int t) {
 	return c;
 }
 
-static void do_create() { openeditor(add(100,100,"",0,0,compiled)); }
+static void do_create() { add(100,100,"",0,0,compiled); }
 
 static void do_execute() {
-	if(editor.tag && editor.tag->data) { execute(editor.tag->data); }
-	else if(selected && selected->data) { execute(selected->data); }
 	draw();
 }
 
 static inline void change_type(enum nmflag p) {
-	if(editor.tag) (*editor.pos)->t=p;
-	else if(selected) selected->t=p;
 	draw();
 }
 static void do_macro() { change_type(macro); }

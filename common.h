@@ -8,8 +8,6 @@ struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t len; u
 struct e { struct e *n; enum nmflag t; struct tag *o; };
 struct voc { struct tag heads[256], *end; };
 
-struct editor { struct tag *tag; struct e **pos; int x, y; };
-
 extern struct editor editor;
 extern struct tag *selected;
 extern int button_height;
