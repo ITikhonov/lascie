@@ -18,25 +18,20 @@
 #define NDEBUG
 #include <assert.h>
 
-static inline int max(int x,int y) { return x>y?x:y; }
-static inline int min(int x,int y) { return x>y?y:x; }
+#include "common.h"
+#include "compiler.h"
 
 static cairo_t *cr=0;
 static int button_height=0;
-static uint8_t gen=0;
 
-enum nmflag { compiled=0, data=1, macro=2, command=3, builtin=4 };
+extern uint8_t gen;
 
-struct tag { uint32_t x,y,w,h; char s[8]; uint8_t t; void *data; uint32_t len; uint8_t nospace; struct e *def; uint8_t gen; };
-
-static struct e { struct e *n; enum nmflag t; struct tag *o; } editcode[1024];
+static struct e editcode[1024];
 static struct e *editcode_e=editcode;
-
-struct voc { struct tag heads[256], *end; };
 
 static struct voc commands = {.end=commands.heads};
 static struct voc builtins = {.end=builtins.heads};
-static struct voc words = {.end=words.heads};
+struct voc words = {.end=words.heads};
 
 static struct editor { struct tag *tag; struct e **pos; int x, y; } editor;
 
@@ -156,51 +151,6 @@ static void openeditor(struct tag *t) {
 
 static void do_create() { openeditor(add(100,100,"",0,0,compiled)); }
 
-static void do_compile();
-static void do_plan();
-static void do_ret();
-static void do_if();
-static void compile_notif();
-static void compile_ifns();
-static void do_end();
-static void compile_begin();
-static void compile_rewind();
-
-static void compile_neg();
-static void compile_0();
-static void compile_1();
-static void compile_2();
-static void compile_3();
-static void compile_4();
-static void compile_5();
-static void compile_6();
-static void compile_7();
-static void compile_8();
-static void compile_9();
-static void compile_a();
-static void compile_b();
-static void compile_c();
-static void compile_d();
-static void compile_e();
-static void compile_f();
-static void compile_n();
-static void compile_h();
-static void compile_fetch();
-static void compile_store();
-
-static uint32_t stackh[32]={0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31}, *stack=stackh+30;
-
-static void execute(void (*f)(void)) {
-	asm volatile (
-		"movl stack,%%esi; lodsl;"
-		"call *%%edx;"
-		"leal -4(%%esi),%%esi;"
-		"movl %%eax,(%%esi);"
-		"movl %%esi,stack"
-		: : "d" (f) : "esi","eax","memory"
-	);
-}
-
 static void do_execute() {
 	if(editor.tag && editor.tag->data) { execute(editor.tag->data); }
 	else if(selected && selected->data) { execute(selected->data); }
@@ -220,18 +170,6 @@ static void do_data() { change_type(data); }
 
 
 static void do_ping(void) { puts("PONG"); }
-static void compile_dup();
-static void compile_drop();
-static void compile_dec();
-static void compile_inc();
-static void compile_nip();
-static void compile_add();
-static void compile_sub();
-static void compile_over();
-static void compile_swap();
-static void compile_spot();
-static void compile_h();
-static void compile_allot();
 
 void init(cairo_t *cr1) {
 	cr=cr1;
@@ -299,7 +237,6 @@ void init(cairo_t *cr1) {
 	add(150,290,"swap", compile_swap,0,builtin);
 
 	add(80,30,"go",0,0,compiled);
-	add(80,50,"spot",compile_spot,0,builtin);
 	add(240,320,"?+", compile_ifns,0,builtin);
 	add(90,270,"-", compile_sub,0,builtin);
 
@@ -338,6 +275,8 @@ static void drawstack() {
 	char s[10];
 	cairo_move_to(cr, 5, 5+button_height);
 	uint32_t *p=stack;
+
+	printf("%08x %08x\n", (uint32_t)stack, (uint32_t)stackh);
 
 	textcolor();
 	while(p<stackh+32) {
@@ -445,243 +384,6 @@ void draw() {
 	if(hexed.tag) drawhexeditor(&hexed);
 
 	drawstack();
-}
-
-static union ic { uint8_t *b; int8_t *c; int32_t *i; void *v; } cc;
-static uint8_t ccode[65535];
-static struct { int32_t *p; struct tag *w; } decs[1024], *dec=decs;
-
-static void compile_imm(int32_t x) { *cc.b++=0xb8; *cc.i++=x; }
-
-
-static int n=0, n_sign=1, base=10;
-void compile_neg() { n_sign=-1; }
-void compile_0() { n=n*base; }
-void compile_1() { n=n*base+1; }
-void compile_2() { n=n*base+2; }
-void compile_3() { n=n*base+3; }
-void compile_4() { n=n*base+4; }
-void compile_5() { n=n*base+5; }
-void compile_6() { n=n*base+6; }
-void compile_7() { n=n*base+7; }
-void compile_8() { n=n*base+8; }
-void compile_9() { n=n*base+9; }
-void compile_n() { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; base=10; }
-
-static void convert_h() {
-	if(base==16) return;
-	int x=n%10; n/=10;
-	x+=(n%10)*0x10; n/=10;
-	x+=(n%10)*0x100; n/=10;
-	x+=(n%10)*0x1000; n/=10;
-	x+=(n%10)*0x10000; n/=10;
-	x+=(n%10)*0x100000; n/=10;
-	x+=(n%10)*0x1000000; n/=10;
-	x+=(n%10)*0x10000000; n/=10;
-	n=x;
-	base=16;
-}
-
-void compile_a() { convert_h(); n=n*16+10; }
-void compile_b() { convert_h(); n=n*16+11; }
-void compile_c() { convert_h(); n=n*16+12; }
-void compile_d() { convert_h(); n=n*16+13; }
-void compile_e() { convert_h(); n=n*16+14; }
-void compile_f() { convert_h(); n=n*16+15; }
-void compile_h() { convert_h(); compile_n(); }
-
-static void do_ret() { *cc.b++=0xc3; }
-static int8_t *fwjumps[8], **fwjump;
-static void do_if() {
-	*cc.b++=0x75;
-	*fwjump++=cc.c++;
-}
-static void compile_notif() { *cc.b++=0x74; *fwjump++=cc.c++; }
-static void compile_ifns() { *cc.b++=0x79; *fwjump++=cc.c++; }
-
-static void do_end() {
-	--fwjump;
-	**fwjump = cc.b - (uint8_t*)((*fwjump)+1);
-}
-
-static int8_t *bwjumps[8], **bwjump;
-static void compile_begin() {
-	*bwjump++=cc.c;
-}
-static void compile_rewind() {
-	--bwjump;
-	*cc.b++=0xeb;
-	*cc.c++=*bwjump-(cc.c+1);
-}
-
-static void compile_dup() {
-	*cc.b++=0x8d; *cc.b++=0x76; *cc.b++=0xfc;
-	*cc.b++=0x89; *cc.b++=0x06;
-}
-
-static void compile_drop() {
-	*cc.b++=0xad;
-}
-
-static void compile_fetch() {
-	*cc.b++=0x8b;
-	*cc.b++=0x00;
-}
-
-static void compile_store() {
-	*cc.b++=0x89;
-	*cc.b++=0xc2;
-	compile_drop();
-	*cc.b++=0x89;
-	*cc.b++=0x02;
-	compile_drop();
-}
-
-static void compile_dec() { *cc.b++=0x48; }
-static void compile_inc() { *cc.b++=0x40; }
-static void compile_nip() { *cc.b++=0x8d; *cc.b++=0x76; *cc.b++=0x04; }
-static void compile_add() { *cc.b++=0x03; *cc.b++=0x06; compile_nip(); }
-static void compile_sub() { *cc.b++=0x2b; *cc.b++=0x06; compile_nip(); }
-static void compile_over() { compile_dup(); *cc.b++=0x8b; *cc.b++=0x46; *cc.b++=0x04; }
-static void compile_swap() { *cc.b++=0x87; *cc.b++=0x06; }
-
-static void compile_call(void *a) { *cc.b++=0xe8; *cc.i++=((uint8_t*)a)-(cc.b+4); }
-
-static void do_spot() {
-	register uint32_t *stack asm("esi");
-	uint32_t *s = (void *)(stack[0]);
-	cairo_set_source_rgb(cr,0.8,0.8,0.8);
-	cairo_arc(cr,s[0],s[1],2,0,7);
-	cairo_fill(cr);
-}
-
-static void compile_spot() {
-	compile_dup();
-	compile_call(do_spot);
-	compile_drop();
-	compile_drop();
-}
-
-static void delay(struct tag *w) {
-	*cc.i=0;
-	dec->p=cc.i++; dec->w=w; dec++;
-}
-
-static struct tag *current;
-
-static void do_allot() {
-	register uint32_t *stack asm("esi");
-	void *data=(void*)stack[1];
-	uint32_t len=stack[0];
-	printf("realloc %08x", (uint32_t)data);
-	stack[1]=(uint32_t)realloc(data,len);
-	printf(" -> %08x (%d)\n", (uint32_t)stack[1], len);
-	current->len=len;
-}
-
-static void compile_allot() {
-	compile_dup();
-	compile_call(do_allot);
-	compile_drop();
-	compile_drop();
-}
-
-static uint8_t *beg;
-
-static inline void compilelist(struct tag *t) {
-	printf("compile %s\n", t->s);
-	fwjump=fwjumps;
-	bwjump=bwjumps;
-	current = t;
-
-	beg=cc.b;
-
-	t->gen++;
-
-	struct e *e=t->def;
-	for(;e;e=e->n) {
-		switch(e->t) {
-		case builtin: { void (*f)(void)=e->o->data; f(); } break;
-		case data:
-			compile_dup();
-			assert(e->o->gen==gen);
-			compile_imm((uint32_t)e->o->data);
-			break;
-		case macro:
-			assert(e->o->gen==gen);
-			execute(e->o->data);
-			break;
-		default:
-			*cc.b++=0xe8;
-			if(e->o->gen!=gen) { delay(e->o); }
-			else if(e->o==t) { *cc.i++=((uint8_t*)e->o->data)-(beg+4); }
-			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
-		}
-	}
-	if(t->t==data) {
-		*(--stack)=(uint32_t)(t->data);
-		execute((void *)beg);
-		t->data=(void *)(*(stack++));
-	}
-	else t->data=beg;
-}
-
-static struct tag *plan[256];
-
-static void do_plan() {
-	struct tag *t;
-	struct e *depth[10],**d;
-	struct tag **p=plan;
-	gen+=2;
-	for(t=words.heads;t<words.end;t++) {
-		if(t->gen==gen) continue;
-		d=depth;
-		struct e *e=t->def;
-		t->gen++;
-		printf("root: %s\n", t->s);
-		for(;;) {
-			for(;e;e=e->n) {
-				if(e->o->t==builtin) continue;
-				if(e->o->gen==gen) continue; // compiled
-				if(e->o->gen==gen-1) {
-					if(e->t==macro) { printf("circular 1 %s\n", e->o->s); return; }
-					struct e **p=d-1;
-					for(;p>=depth && (*p)->o!=e->o;p--) {
-						if((*p)->t == macro) { printf("circular 2 %s\n", e->o->s); return; }
-					}
-					continue; // will backpatch it
-				}
-				break;
-			}
-			if(!e) {
-				if(--d<depth) break;
-				(*d)->o->gen++;
-				printf(" < %d/%d %*s'%s'\n", (*d)->o->gen, gen, (d-depth)*3, "", (*d)->o->s);
-				*p++=(*d)->o;
-				e=(*d)->n;
-			} else {
-				printf(" > %d/%d %*s'%s'\n", e->o->gen, gen, (d-depth)*3, "", e->o->s);
-				e->o->gen++;
-				*d++=e;
-				e=e->o->def;
-			}
-		}
-		t->gen++;
-		*p++=t;
-	}
-	*p=0;
-}
-
-static void do_compile() {
-	cc.b=ccode;
-	struct tag **t;
-	do_plan();
-	dec=decs;
-	gen++;
-	for(t=plan;*t;t++) { compilelist(*t); }
-	while(--dec>=decs) {
-		*dec->p=((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
-	}
 }
 
 static inline int clickcommand(struct tag *e, int x1,int y1) {

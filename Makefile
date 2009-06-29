@@ -3,5 +3,7 @@ LDFLAGS=-lcairo -lpthread -lasound
 
 all: lasca
 
-lasca: lasca.o main.o
+lasca: lasca.o main.o common.o compiler.o
+
+
 
