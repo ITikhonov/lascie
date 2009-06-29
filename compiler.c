@@ -1,20 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <cairo.h>
-#include <stdint.h>
-#include <unistd.h>
-#include <fcntl.h>
-
-#include <alsa/asoundlib.h>
-#include <pthread.h>
-
-#include <math.h>
-
-#define XK_LATIN1
-#define XK_MISCELLANY
-#include <X11/keysymdef.h>
-
 #define NDEBUG
 #include <assert.h>
 
