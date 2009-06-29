@@ -5,8 +5,8 @@ all: lasca
 
 lasca: lasca.o main.o compiler.o draw.o input.o
 
-compiler.o: common.h lasca.h
-draw.o: draw.c common.h compiler.h
-lasca.o: lasca.c common.h compiler.h draw.h
-main.o: main.c
-input.o: input.c common.h lasca.h draw.h
+compiler.o: common.h lasca.h Makefile
+draw.o: draw.c common.h compiler.h Makefile
+lasca.o: lasca.c common.h compiler.h draw.h Makefile
+main.o: main.c Makefile
+input.o: input.c common.h lasca.h draw.h Makefile
