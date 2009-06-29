@@ -19,8 +19,9 @@
 #include <assert.h>
 
 #include "common.h"
+#include "lasca.h"
 
-extern uint8_t gen;
+uint8_t gen=0;
 
 extern struct voc words;
 
@@ -43,24 +44,24 @@ void execute(void (*f)(void)) {
 
 
 static void compile_imm(int32_t x) { *cc.b++=0xb8; *cc.i++=x; }
-void compile_dup() {
+static void compile_dup() {
 	*cc.b++=0x8d; *cc.b++=0x76; *cc.b++=0xfc;
 	*cc.b++=0x89; *cc.b++=0x06;
 }
 
 static int n=0, n_sign=1, base=10;
-void compile_neg() { n_sign=-1; }
-void compile_0() { n=n*base; }
-void compile_1() { n=n*base+1; }
-void compile_2() { n=n*base+2; }
-void compile_3() { n=n*base+3; }
-void compile_4() { n=n*base+4; }
-void compile_5() { n=n*base+5; }
-void compile_6() { n=n*base+6; }
-void compile_7() { n=n*base+7; }
-void compile_8() { n=n*base+8; }
-void compile_9() { n=n*base+9; }
-void compile_n() { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; base=10; }
+static void compile_neg() { n_sign=-1; }
+static void compile_0() { n=n*base; }
+static void compile_1() { n=n*base+1; }
+static void compile_2() { n=n*base+2; }
+static void compile_3() { n=n*base+3; }
+static void compile_4() { n=n*base+4; }
+static void compile_5() { n=n*base+5; }
+static void compile_6() { n=n*base+6; }
+static void compile_7() { n=n*base+7; }
+static void compile_8() { n=n*base+8; }
+static void compile_9() { n=n*base+9; }
+static void compile_n() { compile_dup(); compile_imm(n_sign*n); n=0; n_sign=1; base=10; }
 
 static void convert_h() {
 	if(base==16) return;
@@ -76,49 +77,49 @@ static void convert_h() {
 	base=16;
 }
 
-void compile_a() { convert_h(); n=n*16+10; }
-void compile_b() { convert_h(); n=n*16+11; }
-void compile_c() { convert_h(); n=n*16+12; }
-void compile_d() { convert_h(); n=n*16+13; }
-void compile_e() { convert_h(); n=n*16+14; }
-void compile_f() { convert_h(); n=n*16+15; }
-void compile_h() { convert_h(); compile_n(); }
+static void compile_a() { convert_h(); n=n*16+10; }
+static void compile_b() { convert_h(); n=n*16+11; }
+static void compile_c() { convert_h(); n=n*16+12; }
+static void compile_d() { convert_h(); n=n*16+13; }
+static void compile_e() { convert_h(); n=n*16+14; }
+static void compile_f() { convert_h(); n=n*16+15; }
+static void compile_h() { convert_h(); compile_n(); }
 
 void do_ret() { *cc.b++=0xc3; }
 static int8_t *fwjumps[8], **fwjump;
-void do_if() {
+static void do_if() {
 	*cc.b++=0x75;
 	*fwjump++=cc.c++;
 }
-void compile_notif() { *cc.b++=0x74; *fwjump++=cc.c++; }
-void compile_ifns() { *cc.b++=0x79; *fwjump++=cc.c++; }
+static void compile_notif() { *cc.b++=0x74; *fwjump++=cc.c++; }
+static void compile_ifns() { *cc.b++=0x79; *fwjump++=cc.c++; }
 
-void do_end() {
+static void do_end() {
 	--fwjump;
 	**fwjump = cc.b - (uint8_t*)((*fwjump)+1);
 }
 
 static int8_t *bwjumps[8], **bwjump;
-void compile_begin() {
+static void compile_begin() {
 	*bwjump++=cc.c;
 }
-void compile_rewind() {
+static void compile_rewind() {
 	--bwjump;
 	*cc.b++=0xeb;
 	*cc.c++=*bwjump-(cc.c+1);
 }
 
 
-void compile_drop() {
+static void compile_drop() {
 	*cc.b++=0xad;
 }
 
-void compile_fetch() {
+static void compile_fetch() {
 	*cc.b++=0x8b;
 	*cc.b++=0x00;
 }
 
-void compile_store() {
+static void compile_store() {
 	*cc.b++=0x89;
 	*cc.b++=0xc2;
 	compile_drop();
@@ -127,15 +128,15 @@ void compile_store() {
 	compile_drop();
 }
 
-void compile_dec() { *cc.b++=0x48; }
-void compile_inc() { *cc.b++=0x40; }
-void compile_nip() { *cc.b++=0x8d; *cc.b++=0x76; *cc.b++=0x04; }
-void compile_add() { *cc.b++=0x03; *cc.b++=0x06; compile_nip(); }
-void compile_sub() { *cc.b++=0x2b; *cc.b++=0x06; compile_nip(); }
-void compile_over() { compile_dup(); *cc.b++=0x8b; *cc.b++=0x46; *cc.b++=0x04; }
-void compile_swap() { *cc.b++=0x87; *cc.b++=0x06; }
+static void compile_dec() { *cc.b++=0x48; }
+static void compile_inc() { *cc.b++=0x40; }
+static void compile_nip() { *cc.b++=0x8d; *cc.b++=0x76; *cc.b++=0x04; }
+static void compile_add() { *cc.b++=0x03; *cc.b++=0x06; compile_nip(); }
+static void compile_sub() { *cc.b++=0x2b; *cc.b++=0x06; compile_nip(); }
+static void compile_over() { compile_dup(); *cc.b++=0x8b; *cc.b++=0x46; *cc.b++=0x04; }
+static void compile_swap() { *cc.b++=0x87; *cc.b++=0x06; }
 
-void compile_call(void *a) { *cc.b++=0xe8; *cc.i++=((uint8_t*)a)-(cc.b+4); }
+static void compile_call(void *a) { *cc.b++=0xe8; *cc.i++=((uint8_t*)a)-(cc.b+4); }
 
 static void delay(struct tag *w) {
 	*cc.i=0;
@@ -154,7 +155,7 @@ static void do_allot() {
 	current->len=len;
 }
 
-void compile_allot() {
+static void compile_allot() {
 	compile_dup();
 	compile_call(do_allot);
 	compile_drop();
@@ -257,5 +258,58 @@ void do_compile() {
 	while(--dec>=decs) {
 		*dec->p=((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
 	}
+}
+
+void add_builtins() {
+	nospace=1;
+	add(285,310,"h", compile_h,0,builtin);
+	add(300,310,"d", compile_n,0,builtin);
+	add(300,290,"0", compile_0,0,builtin);
+	add(300,330,"-", compile_neg,0,builtin);
+
+	add(320,290,"1", compile_1,0,builtin);
+	add(335,290,"2", compile_2,0,builtin);
+	add(350,290,"3", compile_3,0,builtin);
+
+	add(320,310,"4", compile_4,0,builtin);
+	add(335,310,"5", compile_5,0,builtin);
+	add(350,310,"6", compile_6,0,builtin);
+
+	add(320,330,"7", compile_7,0,builtin);
+	add(335,330,"8", compile_8,0,builtin);
+	add(350,330,"9", compile_9,0,builtin);
+
+	add(365,290,"a", compile_a,0,builtin);
+	add(365,310,"b", compile_b,0,builtin);
+	add(365,330,"c", compile_c,0,builtin);
+
+	add(380,290,"d", compile_d,0,builtin);
+	add(380,310,"e", compile_e,0,builtin);
+	add(380,330,"f", compile_f,0,builtin);
+	nospace=0;
+
+	add(60,310,"@", compile_fetch,0,builtin);
+	add(90,310,"!", compile_store,0,builtin);
+
+	add(220,310,"!?", compile_notif,0,builtin);
+	add(30,310,"?", do_if,0,builtin);
+	add(30,330,"}", do_end,0,builtin);
+	add(60,330,"dup", compile_dup,0,builtin);
+	add(90,330,"drop", compile_drop,0,builtin);
+	add(130,330,"1-", compile_dec,0,builtin);
+	add(130,310,"1+", compile_inc,0,builtin);
+	add(160,330,"{", compile_begin,0,builtin);
+	add(190,330,"<<", compile_rewind,0,builtin);
+
+	add(60,290,"nip", compile_nip,0,builtin);
+	add(90,290,"+", compile_add,0,builtin);
+	add(120,290,"over", compile_over,0,builtin);
+	add(150,290,"swap", compile_swap,0,builtin);
+
+	add(80,30,"go",0,0,compiled);
+	add(240,320,"?+", compile_ifns,0,builtin);
+	add(90,270,"-", compile_sub,0,builtin);
+
+	add(120,270,"allot", compile_allot,0,builtin);
 }
 
