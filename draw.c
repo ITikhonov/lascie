@@ -20,13 +20,10 @@
 
 #include "common.h"
 #include "compiler.h"
+#include "lasca.h"
 
 static cairo_t *cr=0;
 int button_height=0;
-
-extern struct voc words;
-extern struct voc commands;
-extern struct voc builtins;
 
 struct editor { struct tag *tag; struct e **pos; int x, y; } editor;
 struct tag *selected=0;
