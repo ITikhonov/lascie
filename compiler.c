@@ -8,7 +8,7 @@
 
 static union ic { uint8_t *b; int8_t *c; int32_t *i; void *v; } cc;
 static uint8_t ccode[65535];
-static struct { int32_t *p; struct tag *w; } decs[1024], *dec=decs;
+static struct { int32_t *p; struct word *w; } decs[1024], *dec=decs;
 
 void execute(void (*f)(void)) {
 	asm volatile (
@@ -117,12 +117,12 @@ static void compile_swap() { *cc.b++=0x87; *cc.b++=0x06; }
 
 static void compile_call(void *a) { *cc.b++=0xe8; *cc.i++=((uint8_t*)a)-(cc.b+4); }
 
-static void delay(struct tag *w) {
+static void delay(struct word *w) {
 	*cc.i=0;
 	dec->p=cc.i++; dec->w=w; dec++;
 }
 
-static struct tag *current;
+static struct word *current;
 
 static void do_allot() {
 	register uint32_t *stack asm("esi");
@@ -143,97 +143,98 @@ static void compile_allot() {
 
 static uint8_t *beg;
 
-static inline void compilelist(struct tag *t) {
-	printf("compile %s\n", t->s);
+static inline void compilelist(struct word *w) {
+	printf("compile %s\n", w->s);
 	fwjump=fwjumps;
 	bwjump=bwjumps;
-	current = t;
+	current = w;
 
 	beg=cc.b;
 
-	t->gen++;
+	w->gen++;
 
-	struct e *e=t->def;
+	struct e *e=w->def;
 	for(;e;e=e->n) {
 		switch(e->t) {
-		case builtin: { void (*f)(void)=e->o->data; f(); } break;
 		case data:
 			compile_dup();
-			assert(e->o->gen==gen);
-			compile_imm((uint32_t)e->o->data);
+			assert(e->w->gen==gen);
+			compile_imm((uint32_t)e->w->data);
 			break;
 		case macro:
-			assert(e->o->gen==gen);
-			execute(e->o->data);
+			assert(e->w->gen==gen);
+			execute(e->w->data);
 			break;
-		default:
+		case normal:
 			*cc.b++=0xe8;
-			if(e->o->gen!=gen) { delay(e->o); }
-			else if(e->o==t) { *cc.i++=((uint8_t*)e->o->data)-(beg+4); }
-			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
+			if(e->w->gen!=gen) { delay(e->w); }
+			else if(e->w==w) { *cc.i++=((uint8_t*)e->w->data)-(beg+4); }
+			else { *cc.i++=((uint8_t*)e->w->data)-(cc.b+4); }
+			break;
+		case command: break;
 		}
 	}
-	if(t->t==data) {
-		*(--stack)=(uint32_t)(t->data);
+	if(w->t==special) {
+		*(--stack)=(uint32_t)(w->data);
 		execute((void *)beg);
-		t->data=(void *)(*(stack++));
+		w->data=(void *)(*(stack++));
 	}
-	else t->data=beg;
+	else w->data=beg;
 }
 
-static struct tag *plan[256];
+static struct word *plan[256];
 
 static void do_plan() {
-	struct tag *t;
+	struct word *w;
 	struct e *depth[10],**d;
-	struct tag **p=plan;
+	struct word **p=plan;
 	gen+=2;
-	for(t=words.heads;t<words.end;t++) {
-		if(t->gen==gen) continue;
+	for(w=words.w;w<words.end;w++) {
+		if(w->gen==gen) continue;
 		d=depth;
-		struct e *e=t->def;
-		t->gen++;
-		printf("root: %s\n", t->s);
+		struct e *e=w->def;
+		w->gen++;
+		printf("root: %s\n", w->s);
 		for(;;) {
 			for(;e;e=e->n) {
-				if(e->o->t==builtin) continue;
-				if(e->o->gen==gen) continue; // compiled
-				if(e->o->gen==gen-1) {
-					if(e->t==macro) { printf("circular 1 %s\n", e->o->s); return; }
+				if(e->w->t==builtin) continue;
+				if(e->w->gen==gen) continue; // already compiled
+				if(e->w->gen==gen-1) {
+					if(e->t==macro) { printf("circular 1 %s\n", e->w->s); return; }
 					struct e **p=d-1;
-					for(;p>=depth && (*p)->o!=e->o;p--) {
-						if((*p)->t == macro) { printf("circular 2 %s\n", e->o->s); return; }
+					for(;p>=depth && (*p)->w!=e->w;p--) {
+						if((*p)->t == macro) { printf("circular 2 %s\n", e->w->s); return; }
 					}
-					continue; // will backpatch it
+					continue; // will backpatch it during compile
 				}
 				break;
 			}
 			if(!e) {
 				if(--d<depth) break;
-				(*d)->o->gen++;
-				printf(" < %d/%d %*s'%s'\n", (*d)->o->gen, gen, (d-depth)*3, "", (*d)->o->s);
-				*p++=(*d)->o;
+				(*d)->w->gen++;
+				printf(" < %d/%d %*s'%s'\n", (*d)->w->gen, gen, (d-depth)*3, "", (*d)->w->s);
+				*p++=(*d)->w;
 				e=(*d)->n;
 			} else {
-				printf(" > %d/%d %*s'%s'\n", e->o->gen, gen, (d-depth)*3, "", e->o->s);
-				e->o->gen++;
+				printf(" > %d/%d %*s'%s'\n", e->w->gen, gen, (d-depth)*3, "", e->w->s);
+				e->w->gen++;
 				*d++=e;
-				e=e->o->def;
+				e=e->w->def;
 			}
 		}
-		t->gen++;
-		*p++=t;
+		w->gen++;
+		*p++=w;
 	}
 	*p=0;
 }
 
 void do_compile() {
 	cc.b=ccode;
-	struct tag **t;
+	struct word **w;
 	do_plan();
 	dec=decs;
 	gen++;
-	for(t=plan;*t;t++) { compilelist(*t); }
+	for(w=plan;*w;w++) { compilelist(*w); }
 	while(--dec>=decs) {
 		*dec->p=((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
 	}

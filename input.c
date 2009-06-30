@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include <string.h>
 #define XK_LATIN1
 #define XK_MISCELLANY
@@ -7,23 +9,16 @@
 #include "lasca.h"
 #include "draw.h"
 
-static inline int clickcommand(struct tag *e, int x1,int y1) {
-	if(!(e->y<=y1 && y1<=e->y+e->h && x1>e->x && x1<e->x+e->w)) return 0;
-	void (*f)(void)=(void *)e->data; f(); return 1;
-}
-
-
-static inline int clicktag(struct tag *t, int x1,int y1) {
-	if(!(t->y<=y1 && y1<=t->y+t->h && x1>t->x && x1<t->x+t->w)) return 0;
+static int clicktag(struct tag1 *t, int x1,int y1) {
+	if(!(t->y<=y1 && y1<=t->y+t->w->h && x1>t->x && x1<t->x+t->w->w+(t->nospace?0:10))) return 0;
+	if(t->t==command) { void (*f)(void)=(void *)t->w->data; f(); return 1; }
 	draw();
 	return 1;
 }
 
 void release(int x1,int y1) {
-	struct tag *e;
-	for(e=commands.heads;e<commands.end;e++) { if(clickcommand(e,x1,y1)) return; }
-	for(e=words.heads;e<words.end;e++) { if(clicktag(e,x1,y1)) return; }
-	for(e=builtins.heads;e<builtins.end;e++) { if(clicktag(e,x1,y1)) return; }
+	struct tag1 *t;
+	for(t=tags.tags;t<tags.end;t++) { if(clicktag(t,x1,y1)) return; }
 	draw();
 }
 

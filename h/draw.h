@@ -4,13 +4,8 @@
 #include "compiler.h"
 
 void draw();
-void resize(struct tag *c);
+void resize(struct word *);
 
-void openeditor(struct tag *t);
 void drawinit(cairo_t *cr1);
-void do_hexed();
-
 void draw();
 
-void shift(int *);
-void unshift(int *);

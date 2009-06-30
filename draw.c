@@ -10,10 +10,10 @@ static cairo_t *cr=0;
 
 void draw();
 
-void resize(struct tag *c) {
+void resize(struct word *w) {
 	cairo_text_extents_t te;
-	cairo_text_extents(cr,c->s,&te);
-	c->w=te.x_advance+(c->nospace?0:10); c->h=button_height+5;
+	cairo_text_extents(cr,w->s,&te);
+	w->w=te.x_advance; w->h=button_height+5;
 }
 
 void drawinit(cairo_t *cr1) {
@@ -28,7 +28,6 @@ void drawinit(cairo_t *cr1) {
 }
 
 static void normalcolor()  {cairo_set_source_rgb(cr,0.5,0.9,0.5);}
-static void builtincolor() {cairo_set_source_rgb(cr,0.9,0.5,0.9);}
 static void macrocolor()   {cairo_set_source_rgb(cr,0.5,0.5,0.9);}
 static void datacolor()    {cairo_set_source_rgb(cr,0.9,0.9,0.5);}
 static void commandcolor() {cairo_set_source_rgb(cr,0.9,0.5,0.5);}
@@ -39,14 +38,14 @@ static inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
 
 static int x,y;
 
-static inline void pad(struct tag *o) {
-	cairo_rectangle(cr,x,y,o->w,o->h);
+static inline void pad(struct tag1 *t) {
+	cairo_rectangle(cr,x,y,t->w->w+(t->nospace?0:10),t->w->h);
 	cairo_fill(cr);
 }
 
-static inline void text(struct tag *o) {
-	cairo_move_to(cr, x+(o->nospace?0:5), y+button_height);
-	cairo_show_text(cr, o->s);
+static inline void text(struct tag1 *t) {
+	cairo_move_to(cr, x+(t->nospace?0:5), y+button_height);
+	cairo_show_text(cr, t->w->s);
 	cairo_stroke(cr);
 }
 
@@ -66,11 +65,10 @@ static void drawstack() {
 	cairo_stroke(cr);
 }
 
-static void typecolor(enum nmflag t) {
+static void typecolor(enum tagtype t) {
 	switch(t) {
-		case builtin: builtincolor(); break;
 		case command: commandcolor(); break;
-		case compiled: normalcolor(); break;
+		case normal: normalcolor(); break;
 		case macro: macrocolor(); break;
 		case data: datacolor(); break;
 	}
@@ -79,33 +77,18 @@ static void typecolor(enum nmflag t) {
 void shift(int *y) { if(*y>100-(button_height+5)) *y+=2*(button_height+5); }
 void unshift(int *y) { if(*y>100+2*(button_height+5)) *y-=2*(button_height+5); }
 
-static void drawtag(struct tag *t) {
+static void drawtag(struct tag1 *t) {
 	x=t->x; y=t->y;
-	shift(&y);
 	typecolor(t->t); pad(t);
 	textcolor(); text(t);
-}
-
-
-void do_hexed() {
-}
-
-static inline void drawbyte(uint8_t c) {
-	char *hex="0123456789abcdef";
-	char b[3]={hex[c>>4],hex[c&0xf],0};
-	cairo_move_to(cr,x,y+button_height);
-	cairo_show_text(cr,b);
-	cairo_stroke(cr);
 }
 
 void draw() {
         cairo_set_source_rgb(cr,1,1,1);
         cairo_paint(cr);
 
-	struct tag *e;
-	for(e=builtins.heads;e<builtins.end;e++) { builtincolor(); drawtag(e); }
-	for(e=words.heads;e<words.end;e++) { normalcolor(); drawtag(e); }
-	for(e=commands.heads;e<commands.end;e++) { commandcolor(); drawtag(e); }
+	struct tag1 *t;
+	for(t=tags.tags;t<tags.end;t++) { drawtag(t); }
 
 	drawstack();
 }
