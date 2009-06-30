@@ -6,6 +6,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "draw.h"
+#include "editor.h"
 
 extern uint8_t gen;
 
@@ -110,7 +111,7 @@ struct tag *add(int x, int y, char *s, void *f, int len, int t) {
 	return c;
 }
 
-static void do_create() { add(100,100,"",0,0,compiled); }
+static void do_create() { addtoeditor(add(100,10,"",0,0,compiled)); }
 
 static void do_execute() {
 	draw();

@@ -6,6 +6,7 @@
 #include "common.h"
 #include "lasca.h"
 #include "draw.h"
+#include "editor.h"
 
 static inline int clickcommand(struct tag *e, int x1,int y1) {
 	if(!(e->y<=y1 && y1<=e->y+e->h && x1>e->x && x1<e->x+e->w)) return 0;
@@ -15,6 +16,7 @@ static inline int clickcommand(struct tag *e, int x1,int y1) {
 
 static inline int clicktag(struct tag *t, int x1,int y1) {
 	if(!(t->y<=y1 && y1<=t->y+t->h && x1>t->x && x1<t->x+t->w)) return 0;
+	addtoeditor(t);
 	draw();
 	return 1;
 }

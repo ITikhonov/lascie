@@ -98,15 +98,30 @@ static inline void drawbyte(uint8_t c) {
 	cairo_stroke(cr);
 }
 
+static void draweditor() {
+	int i;
+	x=100; y=100;
+	for(i=0;i<10;i++) {
+		if(editor.w[i]!=0) {
+			printf("draw %s\n", editor.w[i]->s);
+			struct tag *t=editor.w[i];
+			typecolor(t->t); pad(t);
+			textcolor(); text(t);
+			y+=button_height+5;
+		}
+	}
+}
+
 void draw() {
         cairo_set_source_rgb(cr,1,1,1);
         cairo_paint(cr);
 
 	struct tag *e;
-	for(e=builtins.heads;e<builtins.end;e++) { builtincolor(); drawtag(e); }
-	for(e=words.heads;e<words.end;e++) { normalcolor(); drawtag(e); }
-	for(e=commands.heads;e<commands.end;e++) { commandcolor(); drawtag(e); }
+	for(e=builtins.heads;e<builtins.end;e++) { drawtag(e); }
+	for(e=words.heads;e<words.end;e++) { drawtag(e); }
+	for(e=commands.heads;e<commands.end;e++) { drawtag(e); }
 
+	draweditor();
 	drawstack();
 }
 
