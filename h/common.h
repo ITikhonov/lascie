@@ -6,9 +6,9 @@
 enum wordtype { compiled=0,special=1,builtin=2 };
 enum tagtype { normal=0,data=1,macro=2,command=3 };
 
-struct word { uint32_t w,h; char s[8]; enum wordtype t; void *data; uint32_t len; struct e *def; uint8_t gen; };
 struct e { struct e *n; enum tagtype t; uint8_t nospace; struct word *w; };
-struct tag1 { struct e e; uint32_t x,y; uint8_t open; };
+struct word { uint32_t w,h; char s[8]; enum wordtype t; void *data; uint32_t len; struct e def; uint8_t gen; };
+struct tag1 { struct e *e; uint32_t x,y; uint8_t open; };
 
 struct voc { struct word w[256], *end; };
 struct tags { struct tag1 tags[256], *end; };

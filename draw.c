@@ -79,26 +79,20 @@ static void typecolor(enum tagtype t) {
 	}
 }
 
-static void drawlist(struct e *e) {
-	x+=width(e);
-
-	e=e->w->def;
-	if(!e) return;
+static void drawlist(struct e *e, int isopen) {
 	for(;e;e=e->n) {
 		typecolor(e->t); pad(e);
 		textcolor(); text(e);
 		if(selected==e) { commandcolor(); cairo_rectangle(cr,x,y,width(e),e->w->h); cairo_stroke(cr); }
-		x+=e->w->w;
+		if(!isopen) return;
+		x+=width(e);
 	}
 }
 
 static void drawtag(struct tag1 *t) {
 	x=t->x; y=t->y;
-	struct e *e=&t->e;
-	typecolor(e->t); pad(e);
-	textcolor(); text(e);
-	if(t->open) drawlist(e);
-	if(selected==&t->e) { commandcolor(); cairo_rectangle(cr,t->x,t->y,width(e),e->w->h); cairo_stroke(cr); }
+	struct e *e=t->e;
+	drawlist(e,t->open);
 }
 
 void draw() {

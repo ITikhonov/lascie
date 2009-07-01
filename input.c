@@ -11,21 +11,21 @@
 #include "draw.h"
 
 static int cx,cy;
-static struct e *prev;
+static struct e *prev, *sprev;
 static struct e *clicked;
+static struct tag1 *ctag;
 
 static int clicktag(struct tag1 *t, int x1,int y1) {
-	if(!(t->y<=y1 && y1<=t->y+t->e.w->h && x1>t->x)) return 0;
-	cx=t->x; cy=t->y;
-	int x=cx+width(&t->e);
+	if(!(t->y<=y1 && y1<=t->y+t->e->w->h && x1>t->x)) return 0;
+	cx=t->x; cy=t->y; ctag=t;
+	int x=cx;
 	prev=0;
-	if(x1<x) { clicked=&t->e;  return 1; }
-
-	struct e *e=t->e.w->def;
+	struct e *e=t->e;
 	for(;e;e=e->n) {
 		cx=x;
 		x+=width(e);
 		if(x1<x) {
+			printf("clicked: %s prev=%08x\n", e->w->s, (uint32_t)prev);
 			clicked=e;
 			return 1;
 		}
@@ -35,45 +35,64 @@ static int clicktag(struct tag1 *t, int x1,int y1) {
 	return 0;
 }
 
-enum mode { choose, move } mode;
+enum mode { choose, move, noop } mode;
 
 static void clonetag(int x1, int y1) {
 	struct tag1 *t=tags.end++;
-	t->e=*clicked;
+	t->e=&clicked->w->def;
 	t->x=x1;
 	t->y=y1;
 	t->open=0;
-	clicked=&t->e;
+	clicked=t->e;
+	ctag=t;
 	mode=move;
 }
 
-#define TAG(x) ((struct tag1 *)x)
-
 void release(int x1,int y1) {
-	if(!clicked) { selected=0; draw(); return; }
 	switch(mode) {
-		case move: TAG(clicked)->x=x1; TAG(clicked)->y=y1; draw(); return;
+		case noop: break;
+		case move: ctag->x=x1; ctag->y=y1; draw(); return;
 		case choose:
-			if(clicked->t==command) { void (*f)(void)=(void *)clicked->w->data; f(); return; }
+			if(!clicked) { sprev=selected=0; }
+			else if(clicked->t==command) { void (*f)(void)=(void *)clicked->w->data; f(); return; }
+			else if(sprev&&selected) {
+				struct e *e=editcode_e++;
+				*e=*clicked;
+				e->n=sprev->n;
+				sprev->n=e;
+				sprev=e;
+				draw();
+				return;
+			} else {
+				sprev=prev; selected=clicked;
+			}
 	}
-	selected=clicked;
+
 	draw();
 }
 
 
 static void opentag(int x1, int y1) {
 	clonetag(x1,y1);
-	TAG(clicked)->open=1;
+	ctag->open=1;
+	struct e *e=clicked;
+	for(;e->n;e=e->n) { sprev=e; }
+	selected=e;
 }
 
 static void deletetag() {
 	if(prev) {
-		prev->n=prev->n->n;
+		if(clicked->n) {
+			prev->n=prev->n->n;
+			if(selected==clicked) { selected=clicked->n; sprev=prev; }
+		}
 	} else {
 		tags.end--;
-		*TAG(clicked)=*tags.end;
+		*ctag=*tags.end;
+		if(selected==clicked) { selected=0; }
 	}
 	clicked=0;
+	mode=noop;
 	draw();
 }
 
@@ -117,7 +136,7 @@ void motion(int x1, int y1) {
 			}
 		}
 	} else if(mode==move) {
-		TAG(clicked)->x=x1; TAG(clicked)->y=y1;
+		ctag->x=x1; ctag->y=y1;
 		draw();
 	}
 }

@@ -25,9 +25,11 @@ struct e *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum wor
 	t->y=y;
 	t->open=0;
 
-	t->e.t=tt;
-	t->e.nospace=nospace;
-	t->e.w=w;
+	t->e=&w->def;
+
+	t->e->t=tt;
+	t->e->nospace=nospace;
+	t->e->w=w;
 
 	w->gen=gen;
 	w->data=f;
@@ -35,8 +37,8 @@ struct e *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum wor
 	strncpy(w->s,s,7);
 	resize(w);
 
-	w->def=wt==compiled?&final:0;
-	return &t->e;
+	w->def.n=wt==compiled?&final:0;
+	return t->e;
 }
 
 static void do_create() { selected=add(100,100,"",0,0,normal,compiled); draw(); }

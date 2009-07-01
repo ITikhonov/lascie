@@ -155,7 +155,7 @@ static inline void compilelist(struct word *w) {
 
 	w->gen++;
 
-	struct e *e=w->def;
+	struct e *e=w->def.n;
 	for(;e;e=e->n) {
 		switch(e->t) {
 		case data:
@@ -194,7 +194,7 @@ static void do_plan() {
 	for(w=words.w;w<words.end;w++) {
 		if(w->gen==gen) continue;
 		d=depth;
-		struct e *e=w->def;
+		struct e *e=w->def.n;
 		w->gen++;
 		printf("root: %s\n", w->s);
 		for(;;) {
@@ -221,7 +221,7 @@ static void do_plan() {
 				printf(" > %d/%d %*s'%s'\n", e->w->gen, gen, (d-depth)*3, "", e->w->s);
 				e->w->gen++;
 				*d++=e;
-				e=e->w->def;
+				e=e->w->def.n;
 			}
 		}
 		w->gen++;
