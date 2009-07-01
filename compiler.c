@@ -3,6 +3,8 @@
 #define NDEBUG
 #include <assert.h>
 
+#include "compiler.h"
+
 #include "common.h"
 #include "lasca.h"
 
@@ -242,54 +244,54 @@ void do_compile() {
 
 void add_builtins() {
 	nospace=1;
-	add(285,310,"h", compile_h,0,builtin);
-	add(300,310,"d", compile_n,0,builtin);
-	add(300,290,"0", compile_0,0,builtin);
-	add(300,330,"-", compile_neg,0,builtin);
+	add(285,310,"h", compile_h,0,macro,builtin);
+	add(300,310,"d", compile_n,0,macro,builtin);
+	add(300,290,"0", compile_0,0,macro,builtin);
+	add(300,330,"-", compile_neg,0,macro,builtin);
 
-	add(320,290,"1", compile_1,0,builtin);
-	add(335,290,"2", compile_2,0,builtin);
-	add(350,290,"3", compile_3,0,builtin);
+	add(320,290,"1", compile_1,0,macro,builtin);
+	add(335,290,"2", compile_2,0,macro,builtin);
+	add(350,290,"3", compile_3,0,macro,builtin);
 
-	add(320,310,"4", compile_4,0,builtin);
-	add(335,310,"5", compile_5,0,builtin);
-	add(350,310,"6", compile_6,0,builtin);
+	add(320,310,"4", compile_4,0,macro,builtin);
+	add(335,310,"5", compile_5,0,macro,builtin);
+	add(350,310,"6", compile_6,0,macro,builtin);
 
-	add(320,330,"7", compile_7,0,builtin);
-	add(335,330,"8", compile_8,0,builtin);
-	add(350,330,"9", compile_9,0,builtin);
+	add(320,330,"7", compile_7,0,macro,builtin);
+	add(335,330,"8", compile_8,0,macro,builtin);
+	add(350,330,"9", compile_9,0,macro,builtin);
 
-	add(365,290,"a", compile_a,0,builtin);
-	add(365,310,"b", compile_b,0,builtin);
-	add(365,330,"c", compile_c,0,builtin);
+	add(365,290,"a", compile_a,0,macro,builtin);
+	add(365,310,"b", compile_b,0,macro,builtin);
+	add(365,330,"c", compile_c,0,macro,builtin);
 
-	add(380,290,"d", compile_d,0,builtin);
-	add(380,310,"e", compile_e,0,builtin);
-	add(380,330,"f", compile_f,0,builtin);
+	add(380,290,"d", compile_d,0,macro,builtin);
+	add(380,310,"e", compile_e,0,macro,builtin);
+	add(380,330,"f", compile_f,0,macro,builtin);
 	nospace=0;
 
-	add(60,310,"@", compile_fetch,0,builtin);
-	add(90,310,"!", compile_store,0,builtin);
+	add(60,310,"@", compile_fetch,0,macro,builtin);
+	add(90,310,"!", compile_store,0,macro,builtin);
 
-	add(220,310,"!?", compile_notif,0,builtin);
-	add(30,310,"?", do_if,0,builtin);
-	add(30,330,"}", do_end,0,builtin);
-	add(60,330,"dup", compile_dup,0,builtin);
-	add(90,330,"drop", compile_drop,0,builtin);
-	add(130,330,"1-", compile_dec,0,builtin);
-	add(130,310,"1+", compile_inc,0,builtin);
-	add(160,330,"{", compile_begin,0,builtin);
-	add(190,330,"<<", compile_rewind,0,builtin);
+	add(220,310,"!?", compile_notif,0,macro,builtin);
+	add(30,310,"?", do_if,0,macro,builtin);
+	add(30,330,"}", do_end,0,macro,builtin);
+	add(60,330,"dup", compile_dup,0,macro,builtin);
+	add(90,330,"drop", compile_drop,0,macro,builtin);
+	add(130,330,"1-", compile_dec,0,macro,builtin);
+	add(130,310,"1+", compile_inc,0,macro,builtin);
+	add(160,330,"{", compile_begin,0,macro,builtin);
+	add(190,330,"<<", compile_rewind,0,macro,builtin);
 
-	add(60,290,"nip", compile_nip,0,builtin);
-	add(90,290,"+", compile_add,0,builtin);
-	add(120,290,"over", compile_over,0,builtin);
-	add(150,290,"swap", compile_swap,0,builtin);
+	add(60,290,"nip", compile_nip,0,macro,builtin);
+	add(90,290,"+", compile_add,0,macro,builtin);
+	add(120,290,"over", compile_over,0,macro,builtin);
+	add(150,290,"swap", compile_swap,0,macro,builtin);
 
-	add(80,30,"go",0,0,compiled);
-	add(240,320,"?+", compile_ifns,0,builtin);
-	add(90,270,"-", compile_sub,0,builtin);
+	add(80,30,"go",0,0,normal,compiled);
+	add(240,320,"?+", compile_ifns,0,macro,builtin);
+	add(90,270,"-", compile_sub,0,macro,builtin);
 
-	add(120,270,"allot", compile_allot,0,builtin);
+	add(120,270,"allot", compile_allot,0,macro,builtin);
 }
 

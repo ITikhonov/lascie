@@ -12,10 +12,6 @@
 
 static struct tag1 *clicked;
 
-static int width(struct tag1 *t) {
-	return t->w->w+(t->nospace?0:10);
-}
-
 static int clicktag(struct tag1 *t, int x1,int y1) {
 	if(!(t->y<=y1 && y1<=t->y+t->w->h && x1>t->x && x1<t->x+width(t))) return 0;
 	clicked=t;

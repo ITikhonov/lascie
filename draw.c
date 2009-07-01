@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <cairo.h>
 
+#include "draw.h"
+
 #include "common.h"
 #include "compiler.h"
 #include "lasca.h"
@@ -15,6 +17,9 @@ void resize(struct word *w) {
 	cairo_text_extents(cr,w->s,&te);
 	w->w=te.x_advance; w->h=button_height+5;
 }
+
+int width(struct tag1 *t) { return t->w->w+(t->nospace?0:10); }
+
 
 void drawinit(cairo_t *cr1) {
 	cr=cr1;
@@ -38,14 +43,14 @@ static inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
 
 static int x,y;
 
-static inline void pad(struct tag1 *t) {
-	cairo_rectangle(cr,x,y,t->w->w+(t->nospace?0:10),t->w->h);
+static void pad(struct word *w, int nospace) {
+	cairo_rectangle(cr,x,y,w->w+(nospace?0:10),w->h);
 	cairo_fill(cr);
 }
 
-static inline void text(struct tag1 *t) {
-	cairo_move_to(cr, x+(t->nospace?0:5), y+button_height);
-	cairo_show_text(cr, t->w->s);
+static void text(struct word *w, int nospace) {
+	cairo_move_to(cr, x+(nospace?0:5), y+button_height);
+	cairo_show_text(cr, w->s);
 	cairo_stroke(cr);
 }
 
@@ -74,13 +79,29 @@ static void typecolor(enum tagtype t) {
 	}
 }
 
+static void drawlist(struct tag1 *t) {
+	x+=width(t);
+
+	struct e *e=t->w->def;
+	printf("def: %s %08x\n", t->w->s, (uint32_t)e);
+	if(!e) return;
+	for(;e;e=e->n) {
+		typecolor(e->t); pad(e->w,e->nospace);
+		textcolor(); text(e->w,e->nospace);
+		x+=e->w->w;
+	}
+}
+
+
 static void drawtag(struct tag1 *t) {
 	x=t->x; y=t->y;
-	typecolor(t->t); pad(t);
-	textcolor(); text(t);
+	typecolor(t->t); pad(t->w,t->nospace);
+	textcolor(); text(t->w,t->nospace);
+	if(t->open) drawlist(t);
+	printf("open %s %d\n", t->w->s, t->open);
 	if(selected==t) {
 		commandcolor();
-		cairo_rectangle(cr,x,y,t->w->w+(t->nospace?0:10),t->w->h);
+		cairo_rectangle(cr,t->x,t->y,width(t),t->w->h);
 		cairo_stroke(cr);
 	}
 }

@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdint.h>
 
+#include "lasca.h"
+
 #include "common.h"
 #include "compiler.h"
 #include "draw.h"
