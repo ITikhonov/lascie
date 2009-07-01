@@ -22,7 +22,4 @@ extern struct voc builtins;
 extern uint8_t gen;
 extern uint32_t stackh[], *stack;
 
-struct editor { struct tag *w[10]; struct e *pos; };
-extern struct editor editor;
-
 #endif
