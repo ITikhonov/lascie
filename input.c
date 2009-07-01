@@ -10,17 +10,26 @@
 #include "lasca.h"
 #include "draw.h"
 
+static int cx,cy;
+static struct e *prev;
 static struct e *clicked;
 
 static int clicktag(struct tag1 *t, int x1,int y1) {
 	if(!(t->y<=y1 && y1<=t->y+t->e.w->h && x1>t->x)) return 0;
-	int x=t->x+width(&t->e);
-	if(x1<x) { clicked=&t->e; return 1; }
+	cx=t->x; cy=t->y;
+	int x=cx+width(&t->e);
+	prev=0;
+	if(x1<x) { clicked=&t->e;  return 1; }
 
 	struct e *e=t->e.w->def;
 	for(;e;e=e->n) {
+		cx=x;
 		x+=width(e);
-		if(x1<x) return 1;
+		if(x1<x) {
+			clicked=e;
+			return 1;
+		}
+		prev=e;
 	}
 	
 	return 0;
@@ -33,6 +42,7 @@ static void clonetag(int x1, int y1) {
 	t->e=*clicked;
 	t->x=x1;
 	t->y=y1;
+	t->open=0;
 	clicked=&t->e;
 	mode=move;
 }
@@ -57,17 +67,18 @@ static void opentag(int x1, int y1) {
 }
 
 static void deletetag() {
-	tags.end--;
-	*TAG(clicked)=*tags.end;
+	if(prev) {
+		prev->n=prev->n->n;
+	} else {
+		tags.end--;
+		*TAG(clicked)=*tags.end;
+	}
 	clicked=0;
 	draw();
 }
 
 void motion(int x1, int y1) {
 	if(!clicked) return;
-
-	int cy=TAG(clicked)->y;
-	int cx=TAG(clicked)->x;
 	int w=width(clicked);
 	int h=clicked->w->h;
 

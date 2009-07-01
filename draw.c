@@ -87,10 +87,10 @@ static void drawlist(struct e *e) {
 	for(;e;e=e->n) {
 		typecolor(e->t); pad(e);
 		textcolor(); text(e);
+		if(selected==e) { commandcolor(); cairo_rectangle(cr,x,y,width(e),e->w->h); cairo_stroke(cr); }
 		x+=e->w->w;
 	}
 }
-
 
 static void drawtag(struct tag1 *t) {
 	x=t->x; y=t->y;
@@ -98,11 +98,7 @@ static void drawtag(struct tag1 *t) {
 	typecolor(e->t); pad(e);
 	textcolor(); text(e);
 	if(t->open) drawlist(e);
-	if(selected==&t->e) {
-		commandcolor();
-		cairo_rectangle(cr,t->x,t->y,width(e),e->w->h);
-		cairo_stroke(cr);
-	}
+	if(selected==&t->e) { commandcolor(); cairo_rectangle(cr,t->x,t->y,width(e),e->w->h); cairo_stroke(cr); }
 }
 
 void draw() {
