@@ -17,16 +17,17 @@ static struct e final={.n=0,.t=macro};
 static void do_exit() { exit(0); }
 
 int nospace=0;
-struct tag1 *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum wordtype wt) {
+struct e *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum wordtype wt) {
 	struct word *w=words.end++;
 	struct tag1 *t=tags.end++;
 	
-	t->t=tt;
-	t->nospace=nospace;
-	t->w=w;
 	t->x=x;
 	t->y=y;
 	t->open=0;
+
+	t->e.t=tt;
+	t->e.nospace=nospace;
+	t->e.w=w;
 
 	w->gen=gen;
 	w->data=f;
@@ -35,7 +36,7 @@ struct tag1 *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum 
 	resize(w);
 
 	w->def=wt==compiled?&final:0;
-	return t;
+	return &t->e;
 }
 
 static void do_create() { selected=add(100,100,"",0,0,normal,compiled); draw(); }

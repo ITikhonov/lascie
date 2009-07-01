@@ -4,8 +4,8 @@
 #include "compiler.h"
 
 void resize(struct word *);
-int width(struct tag1 *t);
+int width(struct e *);
 
-void drawinit(cairo_t *cr1);
+void drawinit(cairo_t *);
 void draw();
 
