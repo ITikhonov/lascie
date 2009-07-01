@@ -3,12 +3,14 @@
 #define NDEBUG
 #include <assert.h>
 
+#include "compiler.h"
+
 #include "common.h"
 #include "lasca.h"
 
 static union ic { uint8_t *b; int8_t *c; int32_t *i; void *v; } cc;
 static uint8_t ccode[65535];
-static struct { int32_t *p; struct tag *w; } decs[1024], *dec=decs;
+static struct { int32_t *p; struct word *w; } decs[1024], *dec=decs;
 
 void execute(void (*f)(void)) {
 	asm volatile (
@@ -117,12 +119,12 @@ static void compile_swap() { *cc.b++=0x87; *cc.b++=0x06; }
 
 static void compile_call(void *a) { *cc.b++=0xe8; *cc.i++=((uint8_t*)a)-(cc.b+4); }
 
-static void delay(struct tag *w) {
+static void delay(struct word *w) {
 	*cc.i=0;
 	dec->p=cc.i++; dec->w=w; dec++;
 }
 
-static struct tag *current;
+static struct word *current;
 
 static void do_allot() {
 	register uint32_t *stack asm("esi");
@@ -143,97 +145,98 @@ static void compile_allot() {
 
 static uint8_t *beg;
 
-static inline void compilelist(struct tag *t) {
-	printf("compile %s\n", t->s);
+static inline void compilelist(struct word *w) {
+	printf("compile %s\n", w->s);
 	fwjump=fwjumps;
 	bwjump=bwjumps;
-	current = t;
+	current = w;
 
 	beg=cc.b;
 
-	t->gen++;
+	w->gen++;
 
-	struct e *e=t->def;
+	struct e *e=w->def.n;
 	for(;e;e=e->n) {
 		switch(e->t) {
-		case builtin: { void (*f)(void)=e->o->data; f(); } break;
 		case data:
 			compile_dup();
-			assert(e->o->gen==gen);
-			compile_imm((uint32_t)e->o->data);
+			assert(e->w->gen==gen);
+			compile_imm((uint32_t)e->w->data);
 			break;
 		case macro:
-			assert(e->o->gen==gen);
-			execute(e->o->data);
+			assert(e->w->gen==gen);
+			execute(e->w->data);
 			break;
-		default:
+		case normal:
 			*cc.b++=0xe8;
-			if(e->o->gen!=gen) { delay(e->o); }
-			else if(e->o==t) { *cc.i++=((uint8_t*)e->o->data)-(beg+4); }
-			else { *cc.i++=((uint8_t*)e->o->data)-(cc.b+4); }
+			if(e->w->gen!=gen) { delay(e->w); }
+			else if(e->w==w) { *cc.i++=((uint8_t*)e->w->data)-(beg+4); }
+			else { *cc.i++=((uint8_t*)e->w->data)-(cc.b+4); }
+			break;
+		case command: break;
 		}
 	}
-	if(t->t==data) {
-		*(--stack)=(uint32_t)(t->data);
+	if(w->t==special) {
+		*(--stack)=(uint32_t)(w->data);
 		execute((void *)beg);
-		t->data=(void *)(*(stack++));
+		w->data=(void *)(*(stack++));
 	}
-	else t->data=beg;
+	else w->data=beg;
 }
 
-static struct tag *plan[256];
+static struct word *plan[256];
 
 static void do_plan() {
-	struct tag *t;
+	struct word *w;
 	struct e *depth[10],**d;
-	struct tag **p=plan;
+	struct word **p=plan;
 	gen+=2;
-	for(t=words.heads;t<words.end;t++) {
-		if(t->gen==gen) continue;
+	for(w=words.w;w<words.end;w++) {
+		if(w->gen==gen) continue;
 		d=depth;
-		struct e *e=t->def;
-		t->gen++;
-		printf("root: %s\n", t->s);
+		struct e *e=w->def.n;
+		w->gen++;
+		printf("root: %s\n", w->s);
 		for(;;) {
 			for(;e;e=e->n) {
-				if(e->o->t==builtin) continue;
-				if(e->o->gen==gen) continue; // compiled
-				if(e->o->gen==gen-1) {
-					if(e->t==macro) { printf("circular 1 %s\n", e->o->s); return; }
+				if(e->w->t==builtin) continue;
+				if(e->w->gen==gen) continue; // already compiled
+				if(e->w->gen==gen-1) {
+					if(e->t==macro) { printf("circular 1 %s\n", e->w->s); return; }
 					struct e **p=d-1;
-					for(;p>=depth && (*p)->o!=e->o;p--) {
-						if((*p)->t == macro) { printf("circular 2 %s\n", e->o->s); return; }
+					for(;p>=depth && (*p)->w!=e->w;p--) {
+						if((*p)->t == macro) { printf("circular 2 %s\n", e->w->s); return; }
 					}
-					continue; // will backpatch it
+					continue; // will backpatch it during compile
 				}
 				break;
 			}
 			if(!e) {
 				if(--d<depth) break;
-				(*d)->o->gen++;
-				printf(" < %d/%d %*s'%s'\n", (*d)->o->gen, gen, (d-depth)*3, "", (*d)->o->s);
-				*p++=(*d)->o;
+				(*d)->w->gen++;
+				printf(" < %d/%d %*s'%s'\n", (*d)->w->gen, gen, (d-depth)*3, "", (*d)->w->s);
+				*p++=(*d)->w;
 				e=(*d)->n;
 			} else {
-				printf(" > %d/%d %*s'%s'\n", e->o->gen, gen, (d-depth)*3, "", e->o->s);
-				e->o->gen++;
+				printf(" > %d/%d %*s'%s'\n", e->w->gen, gen, (d-depth)*3, "", e->w->s);
+				e->w->gen++;
 				*d++=e;
-				e=e->o->def;
+				e=e->w->def.n;
 			}
 		}
-		t->gen++;
-		*p++=t;
+		w->gen++;
+		*p++=w;
 	}
 	*p=0;
 }
 
 void do_compile() {
 	cc.b=ccode;
-	struct tag **t;
+	struct word **w;
 	do_plan();
 	dec=decs;
 	gen++;
-	for(t=plan;*t;t++) { compilelist(*t); }
+	for(w=plan;*w;w++) { compilelist(*w); }
 	while(--dec>=decs) {
 		*dec->p=((uint8_t *)dec->w->data-(uint8_t*)(dec->p+1));
 	}
@@ -241,54 +244,54 @@ void do_compile() {
 
 void add_builtins() {
 	nospace=1;
-	add(285,310,"h", compile_h,0,builtin);
-	add(300,310,"d", compile_n,0,builtin);
-	add(300,290,"0", compile_0,0,builtin);
-	add(300,330,"-", compile_neg,0,builtin);
+	add(285,310,"h", compile_h,0,macro,builtin);
+	add(300,310,"d", compile_n,0,macro,builtin);
+	add(300,290,"0", compile_0,0,macro,builtin);
+	add(300,330,"-", compile_neg,0,macro,builtin);
 
-	add(320,290,"1", compile_1,0,builtin);
-	add(335,290,"2", compile_2,0,builtin);
-	add(350,290,"3", compile_3,0,builtin);
+	add(320,290,"1", compile_1,0,macro,builtin);
+	add(335,290,"2", compile_2,0,macro,builtin);
+	add(350,290,"3", compile_3,0,macro,builtin);
 
-	add(320,310,"4", compile_4,0,builtin);
-	add(335,310,"5", compile_5,0,builtin);
-	add(350,310,"6", compile_6,0,builtin);
+	add(320,310,"4", compile_4,0,macro,builtin);
+	add(335,310,"5", compile_5,0,macro,builtin);
+	add(350,310,"6", compile_6,0,macro,builtin);
 
-	add(320,330,"7", compile_7,0,builtin);
-	add(335,330,"8", compile_8,0,builtin);
-	add(350,330,"9", compile_9,0,builtin);
+	add(320,330,"7", compile_7,0,macro,builtin);
+	add(335,330,"8", compile_8,0,macro,builtin);
+	add(350,330,"9", compile_9,0,macro,builtin);
 
-	add(365,290,"a", compile_a,0,builtin);
-	add(365,310,"b", compile_b,0,builtin);
-	add(365,330,"c", compile_c,0,builtin);
+	add(365,290,"a", compile_a,0,macro,builtin);
+	add(365,310,"b", compile_b,0,macro,builtin);
+	add(365,330,"c", compile_c,0,macro,builtin);
 
-	add(380,290,"d", compile_d,0,builtin);
-	add(380,310,"e", compile_e,0,builtin);
-	add(380,330,"f", compile_f,0,builtin);
+	add(380,290,"d", compile_d,0,macro,builtin);
+	add(380,310,"e", compile_e,0,macro,builtin);
+	add(380,330,"f", compile_f,0,macro,builtin);
 	nospace=0;
 
-	add(60,310,"@", compile_fetch,0,builtin);
-	add(90,310,"!", compile_store,0,builtin);
+	add(60,310,"@", compile_fetch,0,macro,builtin);
+	add(90,310,"!", compile_store,0,macro,builtin);
 
-	add(220,310,"!?", compile_notif,0,builtin);
-	add(30,310,"?", do_if,0,builtin);
-	add(30,330,"}", do_end,0,builtin);
-	add(60,330,"dup", compile_dup,0,builtin);
-	add(90,330,"drop", compile_drop,0,builtin);
-	add(130,330,"1-", compile_dec,0,builtin);
-	add(130,310,"1+", compile_inc,0,builtin);
-	add(160,330,"{", compile_begin,0,builtin);
-	add(190,330,"<<", compile_rewind,0,builtin);
+	add(220,310,"!?", compile_notif,0,macro,builtin);
+	add(30,310,"?", do_if,0,macro,builtin);
+	add(30,330,"}", do_end,0,macro,builtin);
+	add(60,330,"dup", compile_dup,0,macro,builtin);
+	add(90,330,"drop", compile_drop,0,macro,builtin);
+	add(130,330,"1-", compile_dec,0,macro,builtin);
+	add(130,310,"1+", compile_inc,0,macro,builtin);
+	add(160,330,"{", compile_begin,0,macro,builtin);
+	add(190,330,"<<", compile_rewind,0,macro,builtin);
 
-	add(60,290,"nip", compile_nip,0,builtin);
-	add(90,290,"+", compile_add,0,builtin);
-	add(120,290,"over", compile_over,0,builtin);
-	add(150,290,"swap", compile_swap,0,builtin);
+	add(60,290,"nip", compile_nip,0,macro,builtin);
+	add(90,290,"+", compile_add,0,macro,builtin);
+	add(120,290,"over", compile_over,0,macro,builtin);
+	add(150,290,"swap", compile_swap,0,macro,builtin);
 
-	add(80,30,"go",0,0,compiled);
-	add(240,320,"?+", compile_ifns,0,builtin);
-	add(90,270,"-", compile_sub,0,builtin);
+	add(80,30,"go",0,0,normal,compiled);
+	add(240,320,"?+", compile_ifns,0,macro,builtin);
+	add(90,270,"-", compile_sub,0,macro,builtin);
 
-	add(120,270,"allot", compile_allot,0,builtin);
+	add(120,270,"allot", compile_allot,0,macro,builtin);
 }
 
