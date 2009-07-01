@@ -74,13 +74,15 @@ static void typecolor(enum tagtype t) {
 	}
 }
 
-void shift(int *y) { if(*y>100-(button_height+5)) *y+=2*(button_height+5); }
-void unshift(int *y) { if(*y>100+2*(button_height+5)) *y-=2*(button_height+5); }
-
 static void drawtag(struct tag1 *t) {
 	x=t->x; y=t->y;
 	typecolor(t->t); pad(t);
 	textcolor(); text(t);
+	if(selected==t) {
+		commandcolor();
+		cairo_rectangle(cr,x,y,t->w->w+(t->nospace?0:10),t->w->h);
+		cairo_stroke(cr);
+	}
 }
 
 void draw() {

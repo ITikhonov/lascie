@@ -26,6 +26,7 @@ extern void button(int,int);
 extern void release(int,int);
 extern void key(int);
 extern void go();
+extern void motion(int,int);
 
 static cairo_t *cr=0;
 static cairo_surface_t *surface;
@@ -85,7 +86,7 @@ win_init(win_t *win)
 				   BlackPixel(win->dpy, win->scr), BlackPixel(win->dpy, win->scr));
 
     XSelectInput(win->dpy, win->win,
-		 KeyPressMask|StructureNotifyMask|ExposureMask|ButtonPressMask|ButtonReleaseMask);
+		 KeyPressMask|StructureNotifyMask|ExposureMask|ButtonPressMask|ButtonReleaseMask|Button1MotionMask);
 
     XMapWindow(win->dpy, win->win);
 }
@@ -132,6 +133,12 @@ win_handle_events(win_t *win)
 	{
 		XButtonEvent *b=&xev.xbutton;
 		release(b->x,b->y);
+	}
+	break;
+	case MotionNotify:
+	{
+		XMotionEvent *b=&xev.xmotion;
+		motion(b->x,b->y);
 	}
 	break;
 	case Expose:

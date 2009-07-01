@@ -24,6 +24,7 @@ struct tag1 *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum 
 	t->w=w;
 	t->x=x;
 	t->y=y;
+	t->open=0;
 
 	w->gen=gen;
 	w->data=f;
@@ -35,7 +36,7 @@ struct tag1 *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum 
 	return t;
 }
 
-static void do_create() { add(100,100,"",0,0,normal,compiled); }
+static void do_create() { selected=add(100,100,"",0,0,normal,compiled); draw(); }
 
 static void do_execute() {
 	draw();
