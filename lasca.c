@@ -48,6 +48,7 @@ static void do_execute() {
 }
 
 static inline void change_type(enum tagtype p) {
+	if(selected) selected->t=p;
 	draw();
 }
 static void do_macro() { change_type(macro); }
