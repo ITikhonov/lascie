@@ -34,6 +34,7 @@ struct e *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum wor
 	w->gen=gen;
 	w->data=f;
 	w->len=len;
+	w->t=wt;
 	strncpy(w->s,s,7);
 	resize(w);
 
@@ -44,6 +45,7 @@ struct e *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum wor
 static void do_create() { selected=add(100,100,"",0,0,normal,compiled); draw(); }
 
 static void do_execute() {
+	if(selected && selected->w->data) execute(selected->w->data);
 	draw();
 }
 

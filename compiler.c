@@ -165,7 +165,8 @@ static inline void compilelist(struct word *w) {
 			break;
 		case macro:
 			assert(e->w->gen==gen);
-			execute(e->w->data);
+			if(e->w->t==builtin) { void (*f)(void)=e->w->data; f(); }
+			else { execute(e->w->data); }
 			break;
 		case normal:
 			*cc.b++=0xe8;
@@ -176,7 +177,7 @@ static inline void compilelist(struct word *w) {
 		case command: break;
 		}
 	}
-	if(w->t==special) {
+	if(w->def.t==data) {
 		*(--stack)=(uint32_t)(w->data);
 		execute((void *)beg);
 		w->data=(void *)(*(stack++));
@@ -192,6 +193,7 @@ static void do_plan() {
 	struct word **p=plan;
 	gen+=2;
 	for(w=words.w;w<words.end;w++) {
+		if(w->t==builtin) continue;
 		if(w->gen==gen) continue;
 		d=depth;
 		struct e *e=w->def.n;

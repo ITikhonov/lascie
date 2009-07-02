@@ -29,6 +29,7 @@ static int clicktag(struct tag1 *t, int x1,int y1) {
 			clicked=e;
 			return 1;
 		}
+		if(!t->open) return 0;
 		prev=e;
 	}
 	
