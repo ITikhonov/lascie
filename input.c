@@ -85,6 +85,7 @@ static void deletetag() {
 		if(clicked->n) {
 			prev->n=prev->n->n;
 			if(selected==clicked) { selected=clicked->n; sprev=prev; }
+			else if(sprev==clicked) { sprev=prev; }
 		}
 	} else {
 		tags.end--;
