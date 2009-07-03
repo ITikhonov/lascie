@@ -55,13 +55,19 @@ static void text(struct e *e) {
 }
 
 static void drawstack() {
-	char s[10];
+	char s[20];
 	cairo_move_to(cr, 5, 5+button_height);
 	uint32_t *p=stack;
 
-	printf("%08x %08x\n", (uint32_t)stack, (uint32_t)stackh);
-
 	textcolor();
+
+	sprintf(s,"w: %d/%d ",words.end-words.w,sizeof(words.w)/sizeof(*words.w));
+	cairo_show_text(cr, s);
+	sprintf(s,"t: %d/%d ",tags.end-tags.tags,sizeof(tags.tags)/sizeof(*tags.tags));
+	cairo_show_text(cr, s);
+	sprintf(s,"e: %d/%d | ",editcode_e-editcode,1024);
+	cairo_show_text(cr, s);
+
 	while(p<stackh+32) {
 		sprintf(s,"%x ",*p);
 		cairo_show_text(cr, s);

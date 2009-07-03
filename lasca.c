@@ -11,14 +11,13 @@
 
 extern uint8_t gen;
 
-static struct e editcode[1024];
 static struct e final={.n=0,.t=macro};
 
 static void do_exit() { exit(0); }
 
 int nospace=0;
 struct e *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum wordtype wt) {
-	struct word *w=words.end++;
+	struct word *w=newword();
 	struct tag1 *t=tags.end++;
 	
 	t->x=x;

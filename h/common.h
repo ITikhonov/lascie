@@ -17,6 +17,7 @@ extern struct e *selected;
 extern int button_height;
 
 extern int nospace;
+extern struct e editcode[];
 extern struct e *editcode_e;
 
 extern struct voc words;
@@ -24,5 +25,7 @@ extern struct tags tags;
 
 extern uint8_t gen;
 extern uint32_t stackh[], *stack;
+
+struct word *newword();
 
 #endif
