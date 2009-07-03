@@ -38,7 +38,14 @@ struct e *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum wor
 	strncpy(w->s,s,7);
 	resize(w);
 
-	w->def.n=wt==compiled?&final:0;
+	if(wt==compiled) {
+		struct e *e=editcode_e++;
+		*e=final;
+		w->def.n=e;
+	} else {
+		w->def.n=0;
+	}
+
 	return t->e;
 }
 
