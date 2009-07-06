@@ -8,6 +8,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "draw.h"
+#include "image.h"
 
 extern uint8_t gen;
 
@@ -79,7 +80,14 @@ void init(cairo_t *cr) {
 	add(30,170,"normal",do_normal,0,command,builtin);
 	add(30,190,"data",do_data,0,command,builtin);
 
+	add(30,110,"load", load,0,command,builtin);
+	add(30,130,"save", save,0,command,builtin);
+
 	add_builtins();
+
+	tuser=tags.end;
+	wuser=words.end;
+	euser=editcode_e;
 }
 
 void go() {

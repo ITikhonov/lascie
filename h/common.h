@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-enum wordtype { compiled=0,special=1,builtin=2 };
+enum wordtype { compiled=0,builtin=2 };
 enum tagtype { normal=0,data=1,macro=2,command=3 };
 
 struct e { struct e *n; enum tagtype t; uint8_t nospace; struct word *w; };
@@ -17,7 +17,7 @@ extern struct e *selected;
 extern int button_height;
 
 extern int nospace;
-extern struct e editcode[];
+extern struct e editcode[1024];
 extern struct e *editcode_e;
 
 extern struct voc words;

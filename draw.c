@@ -65,7 +65,7 @@ static void drawstack() {
 	cairo_show_text(cr, s);
 	sprintf(s,"t: %d/%d ",tags.end-tags.tags,sizeof(tags.tags)/sizeof(*tags.tags));
 	cairo_show_text(cr, s);
-	sprintf(s,"e: %d/%d | ",editcode_e-editcode,1024);
+	sprintf(s,"e: %d/%d | ",editcode_e-editcode,sizeof(editcode)/sizeof(*editcode));
 	cairo_show_text(cr, s);
 
 	while(p<stackh+32) {
