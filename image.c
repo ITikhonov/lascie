@@ -5,9 +5,7 @@
 #include "draw.h"
 #include "image.h"
 
-struct tag1 *tuser;
 struct word *wuser;
-struct e *euser;
 
 
 static FILE *f=0;
@@ -25,13 +23,17 @@ void save() {
 	struct tag1 *t;
 	f=fopen("save","w");
 
-	u16(words.end - words.w);
-	for(w=words.w;w<words.end;w++) { u8(w->t); fwrite(w->s,8,1,f); }
-
-	for(w=words.w;w<words.end;w++) {
-		struct e *e=&w->def;
-		for(;e;e=e->n) { u8(e->t); u8(e->nospace); u16(e->w - words.w); } u8(0xff);
+	u16(wuser - words.w);
+	u16(words.end - wuser);
+	for(w=wuser;w<words.end;w++) {
+		u8(w->t); fwrite(w->s,8,1,f);
+		u8(w->def.t); u8(w->def.nospace);
+		u16(w->def.n-editcode);
 	}
+
+	u16(editcode_e-editcode);
+	struct e *e=editcode;
+	for(;e<editcode_e;e++) { u8(e->t); u8(e->nospace); u16(e->w - words.w); u16(e->n?e->n-editcode:0xffff); }
 
 	u16(tags.end - tags.tags);
 	for(t=tags.tags;t<tags.end;t++) { u8(t->open); u32(t->x); u32(t->y); u16(t->e->w - words.w); }
@@ -40,58 +42,49 @@ void save() {
 
 }
 
-static struct word *resolve() {
-	char s[8];
-	fread(s,8,1,f);
-	struct word *w;
-	for(w=words.w;w<words.end;w++) { if(!memcmp(s,w->s,8)) return w; }
-	return 0;
-}
-
 void load() {
-        tags.end=tags.tags;;
-        words.end=wuser;
-        editcode_e=editcode;
+	uint8_t x;
+	uint16_t n;
 
 	f=fopen("save","r");
-	uint8_t x;
-	uint16_t x2;
-	struct word *mh[256], **m, **me;
+	uint16_t builtins, userwords;
+	r16(&builtins); r16(&userwords);
 
-	r16(&x2); me=mh+x2;
-
-	printf("words: %d\n", x2);
-
-	for(m=mh;m<me;m++) {
-		r8(&x);
-		if(x==builtin) { *m=resolve(); continue; }
-		*m=newword();
-		fread((*m)->s,8,1,f);
-		(*m)->t=x;
-		resize(*m);
+	struct word *w=wuser;
+	words.end=wuser+userwords;
+	for(;w<words.end;w++) {
+		r8(&x); w->t=x; fread(&w->s,8,1,f);
+		r8(&x); w->def.t=x; r8(&w->def.nospace);
+		r16(&n); w->def.n=editcode+n;
+		w->def.w=w;
+		resize(w);
 	}
 
-	for(m=mh;m<me;m++) {
-		printf("loading: %u %s\n", m-mh, (*m)->s);
-		r8(&x); (*m)->def.t=x; r8(&(*m)->def.nospace); r16(&x2); (*m)->def.w=*m;
-		for(;;) {
-			r8(&x); if(x==0xff) break;
-			struct e *e=editcode_e++;
-			e->t=x;
-			r8(&e->nospace);
-			r16(&x2);
-			e->w=mh[x2];
-		}
+	uint16_t ne;
+	r16(&ne);
+	editcode_e=editcode+ne;
+	struct e *e=editcode;
+	for(;e<editcode_e;e++) {
+		r8(&x); e->t=x; r8(&e->nospace);
+		r16(&n);
+		if(n<builtins) { e->w=&words.w[n]; }
+		else { e->w=&wuser[n-builtins]; }
+		r16(&n); e->n=n==0xffff?0:(editcode+n);
+	}
+	
+	uint16_t ntags;
+	r16(&ntags);
+
+	tags.end=tags.tags+ntags;
+	struct tag1 *t=tags.tags;
+	for(;t<tags.end;t++) {
+		uint16_t n;
+		r8(&t->open); r32(&t->x); r32(&t->y); r16(&n);
+		if(n<builtins) { t->e=&words.w[n].def; }
+		else { t->e=&wuser[n-builtins].def; }
 	}
 
-	r16(&x2);
-	struct tag1 *t=tags.tags, *te=tags.tags+x2-1;
-	for(;t<te;t=tags.end++) {
-		printf("loading tag %u\n", t-tags.tags);
-		r8(&(t->open)); r32(&t->x); r32(&t->y);
-		r16(&x2); t->e = &mh[x2]->def;
-		printf("loaded tag %u %s\n", x2, mh[x2]->s);
-	}
+
 
 	draw();
 }

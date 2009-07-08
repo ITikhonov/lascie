@@ -85,9 +85,9 @@ void init(cairo_t *cr) {
 
 	add_builtins();
 
-	tuser=tags.end;
 	wuser=words.end;
-	euser=editcode_e;
+
+	add(80,30,"go",0,0,normal,compiled);
 }
 
 void go() {

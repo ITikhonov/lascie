@@ -290,7 +290,6 @@ void add_builtins() {
 	add(120,290,"over", compile_over,0,macro,builtin);
 	add(150,290,"swap", compile_swap,0,macro,builtin);
 
-	add(80,30,"go",0,0,normal,compiled);
 	add(240,320,"?+", compile_ifns,0,macro,builtin);
 	add(90,270,"-", compile_sub,0,macro,builtin);
 
