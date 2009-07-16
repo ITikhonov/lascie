@@ -95,9 +95,21 @@ static void drawhex(struct tag1 *t) {
 	int r,i;
 	char s[4];
 	x=t->x; y=t->y+button_height+5;
-	typecolor(data);
-	cairo_rectangle(cr,x,y,16*8+5,4*(button_height)+5);
-	cairo_fill(cr);
+
+	{
+		int w=16*8+5,h=4*(button_height)+5;
+
+		typecolor(data);
+		cairo_rectangle(cr,x,y,w,h);
+		cairo_fill(cr);
+
+		typecolor(command);
+		int k=(h*t->scroll)/(t->e->w->len/8);
+		cairo_rectangle(cr,x+w,y+k,2,2);
+		cairo_fill(cr);
+
+	}
+
 	textcolor();
 	for(r=0;r<4;r++) {
 		x=t->x+5; y+=button_height;

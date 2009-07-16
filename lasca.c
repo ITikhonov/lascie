@@ -51,6 +51,8 @@ struct e *add(int x, int y, char *s, void *f, int len, enum tagtype tt, enum wor
 
 static void do_create() { selected=add(100,100,"",0,0,normal,compiled); draw(); }
 
+static void do_compile1() { do_compile(); draw(); }
+
 static void do_execute() {
 	if(selected && selected->w->data) execute(selected->w->data);
 	draw();
@@ -70,7 +72,7 @@ void init(cairo_t *cr) {
 	drawinit(cr);
 	
 	add(30,90,"execute", do_execute,0,command,builtin);
-	add(30,70,"compile", do_compile,0,command,builtin);
+	add(30,70,"compile", do_compile1,0,command,builtin);
 	add(30,50,"exit", do_exit,0,command,builtin);
 	add(30,30,"create", do_create,0,command,builtin);
 	final.w=add(30,130,";",do_ret,0,macro,builtin)->w;

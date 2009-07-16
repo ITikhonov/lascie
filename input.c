@@ -10,13 +10,24 @@
 #include "lasca.h"
 #include "draw.h"
 
-static int cx,cy;
+static int cx,cy,cscroll;
 static struct e *prev, *sprev;
 static struct e *clicked;
 static struct tag1 *ctag;
 
+enum mode { choose, move, noop, scroll } mode;
+
 static int clicktag(struct tag1 *t, int x1,int y1) {
-	if(!(t->y<=y1 && y1<=t->y+t->e->w->h && x1>t->x)) return 0;
+	if(!(t->y<=y1 && x1>t->x)) return 0;
+	if(y1>t->y+t->e->w->h) {
+		if(t->open && t->e->t == data) {
+			if(x1<t->x+16*8+5 && y1<t->y+4*(button_height)+5) {
+				cx=x1; cy=y1; ctag=t; mode=scroll; clicked=t->e; cscroll=t->scroll;
+				return 1;
+			}
+		}
+		return 0;
+	}
 	cx=t->x; cy=t->y; ctag=t;
 	int x=cx;
 	prev=0;
@@ -25,7 +36,6 @@ static int clicktag(struct tag1 *t, int x1,int y1) {
 		cx=x;
 		x+=width(e);
 		if(x1<x) {
-			printf("clicked: %s prev=%08x\n", e->w->s, (uint32_t)prev);
 			clicked=e;
 			return 1;
 		}
@@ -36,7 +46,6 @@ static int clicktag(struct tag1 *t, int x1,int y1) {
 	return 0;
 }
 
-enum mode { choose, move, noop } mode;
 
 static void clonetag(int x1, int y1) {
 	struct tag1 *t=tags.end++;
@@ -67,6 +76,7 @@ void release(int x1,int y1) {
 			} else {
 				sprev=prev; selected=clicked;
 			}
+		case scroll:;
 	}
 
 	draw();
@@ -137,6 +147,15 @@ void motion(int x1, int y1) {
 				opentag(x1,y1);
 			}
 		}
+	} else if(mode==scroll) {
+		int n=cscroll + (y1-cy)/4 + 4*((x1-cx)/8);
+		if(n<0) { ctag->scroll=0; }
+		else if(n>ctag->e->w->len/8) {
+			ctag->scroll=ctag->e->w->len/8;
+		} else {
+			ctag->scroll=n;
+		}
+		draw();
 	} else if(mode==move) {
 		ctag->x=x1; ctag->y=y1;
 		draw();
