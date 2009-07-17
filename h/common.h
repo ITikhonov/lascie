@@ -24,7 +24,7 @@ extern struct voc words;
 extern struct tags tags;
 
 extern uint8_t gen;
-extern uint32_t stackh[], *stack;
+extern uint32_t stackh[32], *stack;
 
 struct word *newword();
 

@@ -88,10 +88,10 @@ static void typecolor(enum tagtype t) {
 static void drawhex(struct tag1 *t) {
 	uint8_t *p = t->e->w->data;
 	if(!p) return;
-	p+=t->scroll*8;
-
 	int l = t->e->w->len;
 	uint8_t *end=p+l;
+
+	p+=t->scroll*8;
 	int r,i;
 	char s[4];
 	x=t->x; y=t->y+button_height+5;
@@ -114,15 +114,15 @@ static void drawhex(struct tag1 *t) {
 	for(r=0;r<4;r++) {
 		x=t->x+5; y+=button_height;
 		for(i=0;i<8;i++) {
-			if(p>=end) return;
+			if(p>=end) goto done;
 			cairo_move_to(cr,x,y);
 			sprintf(s,"%02x",*p++);
 			cairo_show_text(cr, s);
 			x+=16;
 		}
 	}
+done:
 	cairo_stroke(cr);
-	
 }
 
 static void drawlist(struct e *e, int isopen) {

@@ -182,7 +182,7 @@ static inline void compilelist(struct word *w) {
 		execute((void *)beg);
 		w->data=(void *)(*(stack++));
 	}
-	else w->data=beg;
+	else { w->data=beg; w->len=cc.b-beg; }
 }
 
 static struct word *plan[256];

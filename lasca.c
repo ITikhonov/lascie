@@ -85,6 +85,8 @@ void init(cairo_t *cr) {
 	add(30,110,"load", load,0,command,builtin);
 	add(30,130,"save", save,0,command,builtin);
 
+	add(30,210,"stack",stackh,sizeof(stackh),data,builtin);
+
 	add_builtins();
 
 	wuser=words.end;
