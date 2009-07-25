@@ -75,7 +75,7 @@ void init(cairo_t *cr) {
 	add(30,70,"compile", do_compile1,0,command,builtin);
 	add(30,50,"exit", do_exit,0,command,builtin);
 	add(30,30,"create", do_create,0,command,builtin);
-	final.w=add(30,130,";",do_ret,0,macro,builtin)->w;
+	final.w=add(30,270,";",do_ret,0,macro,builtin)->w;
 
 
 	add(30,150,"macro",do_macro,0,command,builtin);

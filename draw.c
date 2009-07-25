@@ -8,7 +8,15 @@
 #include "compiler.h"
 #include "lasca.h"
 
+#include <cairo-xlib.h>
+
 static cairo_t *cr=0;
+
+extern Display *dpy;
+extern GC gc;
+extern Window win;
+
+static void grab();
 
 void draw();
 
@@ -22,6 +30,7 @@ int width(struct e *e) { return e->w->w+(e->nospace?0:10); }
 
 
 void drawinit(cairo_t *cr1) {
+	grab();
 	cr=cr1;
 	cairo_select_font_face (cr, "times", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
 	cairo_set_font_size(cr, 12.0);
@@ -32,10 +41,11 @@ void drawinit(cairo_t *cr1) {
 	button_height=te.height;
 }
 
-static void normalcolor()  {cairo_set_source_rgb(cr,0.5,0.9,0.5);}
-static void macrocolor()   {cairo_set_source_rgb(cr,0.5,0.5,0.9);}
-static void datacolor()    {cairo_set_source_rgb(cr,0.9,0.9,0.5);}
-static void commandcolor() {cairo_set_source_rgb(cr,0.9,0.5,0.5);}
+char color[3];
+static void normalcolor()  {color[0]=0x7f; color[1]=0xdf; color[2]=0x7f; cairo_set_source_rgb(cr,0.5,0.9,0.5);}
+static void macrocolor()   {color[0]=0x7f; color[1]=0x7f; color[2]=0xdf; cairo_set_source_rgb(cr,0.5,0.5,0.9);}
+static void datacolor()    {color[0]=0xdf; color[1]=0xdf; color[2]=0x7f; cairo_set_source_rgb(cr,0.9,0.9,0.5);}
+static void commandcolor() {color[0]=0xdf; color[1]=0x7f; color[2]=0x7f; cairo_set_source_rgb(cr,0.9,0.5,0.5);}
 
 static inline void dullcolor()   { cairo_set_source_rgb(cr,0.8,0.8,0.8); }
 
@@ -43,9 +53,29 @@ static inline void textcolor() { cairo_set_source_rgb(cr,0,0,0); }
 
 static int x,y;
 
+XImage *im;
+unsigned int ww,wh;
+
+static void grab() {
+	unsigned int du;
+	int ds;
+	Window w;
+	XGetGeometry(dpy,win,&w,&ds,&ds,&ww,&wh,&du,&du);
+	im=XGetImage(dpy,win,0,0,ww,wh,AllPlanes,ZPixmap);
+}
+
+static void put() {
+	XPutImage(dpy,win,DefaultGC(dpy,DefaultScreen(dpy)),im,0,0,0,0,ww,wh);
+}
+
 static void pad(struct e *e) {
-	cairo_rectangle(cr,x,y,e->w->w+(e->nospace?0:10),e->w->h);
-	cairo_fill(cr);
+	int xi,yi,wi=e->w->w+(e->nospace?0:10),hi=e->w->h;
+	for(yi=0;yi<hi;yi++) {
+		char *p=im->data+ (x*4) + ((y+yi)*4*im->width);
+		for(xi=0;xi<wi;xi++) {
+			*p++=color[0]; *p++=color[1]; *p++=color[2]; p++;
+		}
+	}
 }
 
 static void text(struct e *e) {
@@ -150,5 +180,6 @@ void draw() {
 	for(t=tags.tags;t<tags.end;t++) { drawtag(t); }
 
 	drawstack();
+	put();
 }
 

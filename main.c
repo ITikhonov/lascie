@@ -6,18 +6,18 @@
 #define PI 3.1415926535
 
 typedef struct win {
-    Display *dpy;
     int scr;
-
-    Window win;
-    GC gc;
 
     int width, height;
 } win_t;
 
+Display *dpy;
+GC gc;
+Window win;
+
 static void win_init(win_t *win);
 static void win_init2(win_t *win);
-static void win_deinit(win_t *win);
+static void win_deinit();
 static void win_handle_events(win_t *win);
 
 extern void init(cairo_t *);
@@ -36,9 +36,9 @@ main(int argc, char *argv[])
 {
     win_t win;
 
-    win.dpy = XOpenDisplay(0);
+    dpy = XOpenDisplay(0);
 
-    if (win.dpy == NULL) {
+    if (dpy == NULL) {
 	fprintf(stderr, "Failed to open display\n");
 	return 1;
     }
@@ -46,57 +46,60 @@ main(int argc, char *argv[])
     win_init(&win);
     win_init2(&win);
 
+    XSync(dpy,False);
     draw();
+
 
     win_handle_events(&win);
 
     win_deinit(&win);
 
-    XCloseDisplay(win.dpy);
+    XCloseDisplay(dpy);
 
     return 0;
 }
 
 
 static void
-win_init2(win_t *win)
+win_init2(win_t *w)
 {
-    Visual *visual = DefaultVisual(win->dpy, DefaultScreen (win->dpy));
+    Visual *visual = DefaultVisual(dpy, DefaultScreen (dpy));
 
-    XClearWindow(win->dpy, win->win);
+    XClearWindow(dpy, win);
 
-    surface = cairo_xlib_surface_create (win->dpy, win->win, visual,
-					 win->width, win->height);
+    surface = cairo_xlib_surface_create (dpy, win, visual,
+					 w->width, w->height);
     init(cr=cairo_create(surface));
 }
 
 static void
-win_init(win_t *win)
+win_init(win_t *w)
 {
     Window root;
 
-    win->width = 400;
-    win->height = 400;
+    w->width = 400;
+    w->height = 400;
 
-    root = DefaultRootWindow(win->dpy);
-    win->scr = DefaultScreen(win->dpy);
+    root = DefaultRootWindow(dpy);
+    w->scr = DefaultScreen(dpy);
+    gc = DefaultGC(dpy,w->scr);
 
-    win->win = XCreateSimpleWindow(win->dpy, root, 0, 0,
-				   win->width, win->height, 0,
-				   BlackPixel(win->dpy, win->scr), BlackPixel(win->dpy, win->scr));
+    win = XCreateSimpleWindow(dpy, root, 0, 0,
+				   w->width, w->height, 0,
+				   WhitePixel(dpy, w->scr), WhitePixel(dpy, w->scr));
 
-    XSelectInput(win->dpy, win->win,
+    XSelectInput(dpy, win,
 		 KeyPressMask|StructureNotifyMask|ExposureMask|ButtonPressMask|ButtonReleaseMask|Button1MotionMask);
 
-    XMapWindow(win->dpy, win->win);
+    XMapWindow(dpy, win);
 }
 
 static void
-win_deinit(win_t *win)
+win_deinit()
 {
     cairo_destroy(cr);
     cairo_surface_destroy (surface);
-    XDestroyWindow(win->dpy, win->win);
+    XDestroyWindow(dpy, win);
 }
 
 static void
@@ -105,14 +108,14 @@ win_handle_events(win_t *win)
     XEvent xev;
 
     while (1) {
-	while(XPending(win->dpy)==0) { go(); }
-	XNextEvent(win->dpy, &xev);
+	while(XPending(dpy)==0) { go(); }
+	XNextEvent(dpy, &xev);
 	switch(xev.type) {
 	case KeyPress:
 	{
 	    XKeyEvent *kev = &xev.xkey;
 	    
-	    key(XKeycodeToKeysym(win->dpy,kev->keycode,0));
+	    key(XKeycodeToKeysym(dpy,kev->keycode,0));
 	}
 	break;
 	case ConfigureNotify:

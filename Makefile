@@ -11,3 +11,6 @@ all:
 	cc $(CFLAGS) -c -o o/image.o image.c
 	cc $(LDFLAGS) o/lasca.o o/main.o o/compiler.o o/draw.o o/input.o o/common.o o/image.o  -o lasca
 
+font:
+	cc $(CFLAGS) $(LDFLAGS) -o genfont genfont.c
+
