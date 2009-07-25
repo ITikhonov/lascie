@@ -21,7 +21,7 @@ static int clicktag(struct tag1 *t, int x1,int y1) {
 	if(!(t->y<=y1 && x1>t->x)) return 0;
 	if(y1>t->y+t->e->w->h) {
 		if(t->open && t->e->t == data) {
-			if(x1<t->x+16*8+5 && y1<t->y+4*(button_height)+5) {
+			if(x1<t->x+16*8+5 && y1<t->y+t->e->w->h+4*(button_height)+5) {
 				cx=x1; cy=y1; ctag=t; mode=scroll; clicked=t->e; cscroll=t->scroll;
 				return 1;
 			}
