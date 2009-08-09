@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <cairo.h>
 
+#include "o/font.h"
+
 #include "draw.h"
 
 #include "common.h"
@@ -21,24 +23,26 @@ static void grab();
 void draw();
 
 void resize(struct word *w) {
-	cairo_text_extents_t te;
-	cairo_text_extents(cr,w->s,&te);
-	w->w=te.x_advance; w->h=button_height+5;
+	int x=0;
+	char *s=w->s;
+	for(;*s;s++) {
+		struct chare *c=chars+(unsigned char)*s;
+		x+=c->a;
+	}
+	w->w=x; w->h=button_height+5;
 }
 
 int width(struct e *e) { return e->w->w+(e->nospace?0:10); }
 
 
 void drawinit(cairo_t *cr1) {
-	grab();
 	cr=cr1;
 	cairo_select_font_face (cr, "times", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
 	cairo_set_font_size(cr, 12.0);
 	cairo_set_line_width (cr,1);
 
-	cairo_text_extents_t te;
-	cairo_text_extents(cr,"abcdefghijklmnopqrstuvwxyz0123456789;",&te);
-	button_height=te.height;
+	struct chare *e = chars+(unsigned char)'t';
+	button_height= e->h+e->t;
 }
 
 char color[3];
@@ -66,10 +70,13 @@ static void grab() {
 
 static void put() {
 	XPutImage(dpy,win,DefaultGC(dpy,DefaultScreen(dpy)),im,0,0,0,0,ww,wh);
+	XFree(im);
 }
 
 static void pad(struct e *e) {
 	int xi,yi,wi=e->w->w+(e->nospace?0:10),hi=e->w->h;
+	if((y+hi)>wh) hi=wh-y;
+	if((x+wi)>ww) wi=ww-x;
 	for(yi=0;yi<hi;yi++) {
 		char *p=im->data+ (x*4) + ((y+yi)*4*im->width);
 		for(xi=0;xi<wi;xi++) {
@@ -78,10 +85,37 @@ static void pad(struct e *e) {
 	}
 }
 
+static int drawchar(int x0,int y0, char b) {
+	int x;
+	struct chare *c=chars+(unsigned char)b;
+	unsigned char *r=(unsigned char*)(im->data+(y0-c->t)*4*ww+(x0+c->l)*4);
+	unsigned char *re=(unsigned char*)(im->data+wh*ww*4);
+	unsigned char *d=c->p;
+
+	int size=c->w*c->h;
+	int pitch=(ww-c->w)*4;
+
+	for(x=0;x<size;x++) {
+		if(r<(unsigned char *)(im->data)) continue;
+		if(r>re) break;
+		int cc=0xff-*d++;
+		*r=((int)*r*cc)/0xff; r++;
+		*r=((int)*r*cc)/0xff; r++;
+		*r=((int)*r*cc)/0xff; r++;
+		*r++=0;
+		if(x%c->w==(c->w-1)) r+=pitch;
+	}
+	return c->a;
+}
+
+static void drawtext(int x,int y,char *s) {
+	for(;*s;s++) {
+		x+=drawchar(x,y,*s);
+	}
+}
+
 static void text(struct e *e) {
-	cairo_move_to(cr, x+(e->nospace?0:5), y+button_height);
-	cairo_show_text(cr, e->w->s);
-	cairo_stroke(cr);
+	drawtext(x+(e->nospace?0:5), y+button_height, e->w->s);
 }
 
 static void drawstack() {
@@ -173,13 +207,17 @@ static void drawtag(struct tag1 *t) {
 }
 
 void draw() {
+	drawstack();
+	grab();
         cairo_set_source_rgb(cr,1,1,1);
         cairo_paint(cr);
 
 	struct tag1 *t;
 	for(t=tags.tags;t<tags.end;t++) { drawtag(t); }
 
-	drawstack();
+
+	if(0) drawchar(10,10,'T');
+	if(1) drawtext(10,10,"abcdcp.-;");
 	put();
 }
 

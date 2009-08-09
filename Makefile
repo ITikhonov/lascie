@@ -1,7 +1,7 @@
 CFLAGS=-g -Ih -I/usr/include/cairo -Wall -Werror
 LDFLAGS=-lcairo -lpthread -lasound
 
-all:
+all: font
 	cc $(CFLAGS) -c -o o/lasca.o lasca.c
 	cc $(CFLAGS) -c -o o/main.o main.c
 	cc $(CFLAGS) -c -o o/draw.o draw.c
@@ -12,5 +12,6 @@ all:
 	cc $(LDFLAGS) o/lasca.o o/main.o o/compiler.o o/draw.o o/input.o o/common.o o/image.o  -o lasca
 
 font:
-	cc $(CFLAGS) $(LDFLAGS) -o genfont genfont.c
+	cc $(CFLAGS) `freetype-config --cflags` $(LDFLAGS) -o genfont genfont.c
+	./genfont > o/font.h
 
