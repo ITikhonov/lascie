@@ -67,9 +67,9 @@ static void do_normal() { change_type(compiled); }
 static void do_data() { change_type(data); }
 
 
-void init(cairo_t *cr) {
+void init() {
 	editcode_e=editcode;
-	drawinit(cr);
+	drawinit();
 	
 	add(30,90,"execute", do_execute,0,command,builtin);
 	add(30,70,"compile", do_compile1,0,command,builtin);

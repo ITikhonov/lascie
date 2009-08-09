@@ -1,7 +1,7 @@
 #include <stdio.h>
+#include <stdlib.h>
 
-#include <cairo.h>
-#include <cairo-xlib.h>
+#include <GL/glx.h>
 
 #define PI 3.1415926535
 
@@ -20,7 +20,7 @@ static void win_init2(win_t *win);
 static void win_deinit();
 static void win_handle_events(win_t *win);
 
-extern void init(cairo_t *);
+extern void init();
 extern void draw();
 extern void button(int,int);
 extern void release(int,int);
@@ -28,8 +28,9 @@ extern void key(int);
 extern void go();
 extern void motion(int,int);
 
-static cairo_t *cr=0;
-static cairo_surface_t *surface;
+int windoww;
+int windowh;
+void *backbuffer;
 
 int
 main(int argc, char *argv[])
@@ -63,13 +64,20 @@ main(int argc, char *argv[])
 static void
 win_init2(win_t *w)
 {
-    Visual *visual = DefaultVisual(dpy, DefaultScreen (dpy));
-
     XClearWindow(dpy, win);
+    init();
+}
 
-    surface = cairo_xlib_surface_create (dpy, win, visual,
-					 w->width, w->height);
-    init(cr=cairo_create(surface));
+GLXContext ctx;
+
+void rebackbuffer(win_t *w) {
+    backbuffer = malloc(w->width*w->height*4);
+    windoww=w->width; windowh=w->height;
+    glViewport(0,0,windoww,windowh);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0,windoww,windowh,0,0,1);
+    glMatrixMode(GL_MODELVIEW);
 }
 
 static void
@@ -84,21 +92,27 @@ win_init(win_t *w)
     w->scr = DefaultScreen(dpy);
     gc = DefaultGC(dpy,w->scr);
 
-    win = XCreateSimpleWindow(dpy, root, 0, 0,
-				   w->width, w->height, 0,
-				   WhitePixel(dpy, w->scr), WhitePixel(dpy, w->scr));
+    int attrib[]={GLX_RGBA, GLX_RED_SIZE, 1, GLX_GREEN_SIZE, 1, GLX_BLUE_SIZE, 1, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 1, None}; 
+    XVisualInfo *visinfo = glXChooseVisual( dpy, w->scr, attrib );
+
+    if(!visinfo) { abort(); }
+
+    XSetWindowAttributes attr = { .colormap=XCreateColormap(dpy,root,visinfo->visual,AllocNone) };
+    win = XCreateWindow(dpy, root, 0, 0, w->width, w->height, 0, visinfo->depth, InputOutput, visinfo->visual, CWColormap, &attr);
+
 
     XSelectInput(dpy, win,
 		 KeyPressMask|StructureNotifyMask|ExposureMask|ButtonPressMask|ButtonReleaseMask|Button1MotionMask);
 
+    ctx = glXCreateContext( dpy, visinfo, NULL, True );
     XMapWindow(dpy, win);
+    glXMakeCurrent(dpy, win, ctx);
+    rebackbuffer(w);
 }
 
 static void
 win_deinit()
 {
-    cairo_destroy(cr);
-    cairo_surface_destroy (surface);
     XDestroyWindow(dpy, win);
 }
 
@@ -123,7 +137,7 @@ win_handle_events(win_t *win)
 	    XConfigureEvent *cev = &xev.xconfigure;
 		win->width = cev->width;
 		win->height = cev->height;
-		cairo_xlib_surface_set_size(surface,cev->width,cev->height);
+		rebackbuffer(win);
 	}
 	break;
 	case ButtonPress:
