@@ -169,8 +169,11 @@ static inline void compilelist(struct word *w) {
 			else { execute(e->w->data); }
 			break;
 		case normal:
+			if(e->w->t==builtin) compile_dup();
 			*cc.b++=0xe8;
-			if(e->w->gen!=gen) { delay(e->w); }
+			if(e->w->t==builtin) {
+				*cc.i++=((uint8_t*)e->w->data)-(cc.b+4);
+			} else if(e->w->gen!=gen) { delay(e->w); }
 			else if(e->w==w) { *cc.i++=((uint8_t*)e->w->data)-(beg+4); }
 			else { *cc.i++=((uint8_t*)e->w->data)-(cc.b+4); }
 			break;
